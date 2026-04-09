@@ -1,12 +1,12 @@
 {
   "metadata": {
     "application": "JusticeBot",
-    "generated_at": "2026-04-06T12:47:57.125061"
+    "generated_at": "2026-04-09T23:11:01.917451"
   },
   "metrics": {
     "latencies": {
-      "GET / returns 200 OK": 2.76,
-      "GET /api/dlsa valid for Punjab": 0.23,
+      "GET / returns 200 OK": 2.55,
+      "GET /api/dlsa valid for Punjab": 0.24,
       "GET /api/dlsa handles 404 cleanly": 0.16,
       "POST /api/draft handles missing context properly": 0.2
     }
@@ -212,14 +212,14 @@
       "test": "GET / returns 200 OK",
       "status": "PASS",
       "detail": "",
-      "duration_ms": 2.76
+      "duration_ms": 2.55
     },
     {
       "category": "Routes",
       "test": "GET /api/dlsa valid for Punjab",
       "status": "PASS",
       "detail": "",
-      "duration_ms": 0.23
+      "duration_ms": 0.24
     },
     {
       "category": "Routes",

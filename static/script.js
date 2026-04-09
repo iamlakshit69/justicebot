@@ -1,197 +1,253 @@
 // static/script.js
-// JusticeBot — Premium UI Script (Enhanced with Section Popups + Legal Aid Finder)
+// JusticeBot — Apple Dark Glass UI
+// Rewritten: domain panel killed · action chips · flat bot text · arc meter
+
+'use strict';
+
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
 
 let sessionId = generateSessionId();
 let lastAnalysisResult = null;
 let lastDraftText = null;
 let isLoading = false;
 
-// Legal Aid Finder state
+// Legal Aid Finder
 let legalAidMap = null;
 let legalAidMarkers = [];
 let legalAidResults = [];
 let currentLegalAidFilter = 'all';
 let userLocationMarker = null;
 
-function generateSessionId() {
-    return 'session_' + Math.random().toString(36).substr(2, 9);
-}
+// Chat history (sidebar)
+let chatHistory = [];   // [{id, title, sessionId}]
 
-// ── SECURITY: Risk-level whitelist ──
-// clause.risk_level comes from LLM JSON and must never be injected into
-// DOM attributes (class names) without validation — doing so is a stored
-// XSS vector.  Only these three values are allowed through.
+// ─────────────────────────────────────────────
+// SECURITY HELPERS
+// ─────────────────────────────────────────────
 
 const VALID_RISK_LEVELS = new Set(['dangerous', 'questionable', 'safe']);
 
 function sanitizeRiskLevel(level) {
-    const normalized = String(level || '').toLowerCase().trim();
-    return VALID_RISK_LEVELS.has(normalized) ? normalized : 'safe';
+    const n = String(level || '').toLowerCase().trim();
+    return VALID_RISK_LEVELS.has(n) ? n : 'safe';
 }
 
-// ── INIT ──
+function escapeHTML(str) {
+    if (!str) return '';
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function escapeAttr(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+// ─────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────
+
+function generateSessionId() {
+    return 'session_' + Math.random().toString(36).substr(2, 9);
+}
+
+function now() {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function icons() {
+    if (window.lucide) lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Set keyboard hint based on OS
-    const hintEl = document.getElementById('inputHint');
-    if (hintEl) {
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 ||
-            navigator.userAgent.toUpperCase().indexOf('MAC') >= 0;
-        const modKey = isMac ? '⌘' : 'Ctrl';
-        hintEl.innerHTML = `<kbd>${modKey}</kbd> + <kbd>Enter</kbd> to send · <kbd>Enter</kbd> for newline`;
-    }
-
-    // Scroll-to-bottom visibility
+    // Scroll-to-bottom visibility toggle
     const chatArea = document.getElementById('chatArea');
     if (chatArea) {
         chatArea.addEventListener('scroll', () => {
             const btn = document.getElementById('scrollBottomBtn');
             if (!btn) return;
-            const distFromBottom = chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight;
-            btn.style.display = distFromBottom > 150 ? 'flex' : 'none';
+            const dist = chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight;
+            btn.style.display = dist > 150 ? 'flex' : 'none';
         });
     }
 });
 
+// ─────────────────────────────────────────────
+// TEXTAREA AUTO-RESIZE
+// ─────────────────────────────────────────────
 
-// ── AUTO-RESIZE TEXTAREA ──
-
-function autoResize(el) {
+function autoResizeTextarea(el) {
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 130) + 'px';
 }
 
-// ── SIDEBAR TOGGLE (MOBILE) ──
+// ─────────────────────────────────────────────
+// SIDEBAR
+// ─────────────────────────────────────────────
 
 function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    sidebar.classList.toggle('open');
-    overlay.classList.toggle('visible');
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebarOverlay').classList.toggle('visible');
 }
 
 function closeSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    sidebar.classList.remove('open');
-    overlay.classList.remove('visible');
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('visible');
 }
 
-// ── DISCLAIMER ──
-
-function dismissDisclaimer() {
-    const banner = document.getElementById('disclaimerBanner');
-    if (banner) {
-        banner.style.animation = 'slideUp 0.3s var(--ease-out) forwards';
-        setTimeout(() => banner.remove(), 300);
-    }
-}
-
-// ── SCROLL TO BOTTOM ──
+// ─────────────────────────────────────────────
+// SCROLL
+// ─────────────────────────────────────────────
 
 function scrollToBottom() {
     const chatArea = document.getElementById('chatArea');
     chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
 }
 
-// ── HEADER COLLAPSE ──
+// ─────────────────────────────────────────────
+// EMPTY STATE
+// ─────────────────────────────────────────────
 
-function collapseHeader() {
-    const header = document.getElementById('mainHeader');
-    if (header && !header.classList.contains('collapsed')) {
-        header.classList.add('collapsed');
-    }
+function hideEmptyState() {
+    const el = document.getElementById('emptyState');
+    if (el && !el.classList.contains('hidden')) el.classList.add('hidden');
 }
 
-// ── LOADING STATE ──
+// ─────────────────────────────────────────────
+// LOADING STATE
+// ─────────────────────────────────────────────
 
 function setLoading(loading) {
     isLoading = loading;
-    const sendBtn = document.getElementById('sendBtn');
-    const sendIcon = sendBtn.querySelector('.send-icon');
-    const loadingIcon = sendBtn.querySelector('.loading-icon');
+    const btn = document.getElementById('sendBtn');
+    const icon = document.getElementById('sendIcon');
     const textarea = document.getElementById('userInput');
 
     if (loading) {
-        sendBtn.disabled = true;
-        sendBtn.classList.add('loading');
-        sendIcon.style.display = 'none';
-        loadingIcon.style.display = 'block';
+        btn.disabled = true;
+        btn.classList.add('loading');
+        // Swap icon to spinner
+        icon.setAttribute('data-lucide', 'loader-2');
+        icon.classList.add('loading-icon');
         textarea.disabled = true;
     } else {
-        sendBtn.disabled = false;
-        sendBtn.classList.remove('loading');
-        sendIcon.style.display = 'block';
-        loadingIcon.style.display = 'none';
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        icon.setAttribute('data-lucide', 'arrow-up');
+        icon.classList.remove('loading-icon');
         textarea.disabled = false;
         textarea.focus();
     }
+    icons();
 }
 
-// ── SEND QUERY ──
+// ─────────────────────────────────────────────
+// MESSAGE RENDERERS
+// ─────────────────────────────────────────────
 
-async function sendQuery() {
-    if (isLoading) return;
-
-    const input = document.getElementById('userInput');
-    const query = input.value.trim();
-    if (!query) return;
-
-    // Input length validation
-    if (query.length > 3000) {
-        appendBotMessage('Your message is too long. Please keep it under 3000 characters.');
-        return;
-    }
-
-    collapseHeader();
-    appendUserMessage(query);
-    input.value = '';
-    input.style.height = 'auto';
-
-    setLoading(true);
-    const thinkingId = appendThinking('Analyzing your legal question...');
-
-    try {
-        const response = await fetch('/api/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: query, session_id: sessionId })
-        });
-
-        const data = await response.json();
-        removeThinking(thinkingId);
-
-        if (!response.ok || data.error) {
-            appendBotMessage(escapeHTML(data.error || 'Something went wrong. Please try again.'));
-            return;
-        }
-
-        lastAnalysisResult = data;
-        renderAnalysisResult(data);
-
-        // Highlight active domain in sidebar
-        highlightDomain(data.domain);
-
-    } catch (err) {
-        removeThinking(thinkingId);
-        appendBotMessage('Connection error. Please check that the server is running.');
-    } finally {
-        setLoading(false);
-    }
+function appendUserMessage(text) {
+    hideEmptyState();
+    const chatArea = document.getElementById('chatArea');
+    const row = document.createElement('div');
+    row.className = 'message-row user-row';
+    row.innerHTML = `
+        <div>
+            <div class="user-bubble">${escapeHTML(text)}</div>
+            <div class="msg-meta">${now()}</div>
+        </div>`;
+    chatArea.appendChild(row);
+    scrollToBottom();
+    addToHistory(text);
 }
 
-function handleKeyDown(event) {
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const modKey = isMac ? event.metaKey : event.ctrlKey;
-
-    if (modKey && event.key === 'Enter') {
-        event.preventDefault();
-        sendQuery();
-    }
-    // Plain Enter inserts newline (default textarea behavior)
+function appendBotMessage(text) {
+    hideEmptyState();
+    const chatArea = document.getElementById('chatArea');
+    const row = document.createElement('div');
+    row.className = 'message-row bot-row';
+    row.innerHTML = `
+        <div>
+            <div class="bot-text"><p>${escapeHTML(text)}</p></div>
+            <div class="msg-meta">${now()}</div>
+        </div>`;
+    chatArea.appendChild(row);
+    icons();
+    scrollToBottom();
 }
 
-// ── NEW CHAT ──
+function appendThinking() {
+    hideEmptyState();
+    const chatArea = document.getElementById('chatArea');
+    const id = 'thinking_' + Date.now();
+    const row = document.createElement('div');
+    row.id = id;
+    row.className = 'thinking-row';
+    row.innerHTML = `
+        <div class="thinking-bubble">
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+        </div>`;
+    chatArea.appendChild(row);
+    scrollToBottom();
+    return id;
+}
+
+function removeThinking(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.opacity = '0';
+    el.style.transition = 'opacity 0.18s ease';
+    setTimeout(() => el.remove(), 200);
+}
+
+// ─────────────────────────────────────────────
+// CHAT HISTORY (SIDEBAR)
+// ─────────────────────────────────────────────
+
+function addToHistory(firstMessage) {
+    // Only record first message of a session
+    const exists = chatHistory.find(h => h.sessionId === sessionId);
+    if (exists) return;
+
+    const title = firstMessage.length > 48
+        ? firstMessage.slice(0, 48) + '…'
+        : firstMessage;
+
+    const entry = { id: Date.now(), title, sessionId };
+    chatHistory.unshift(entry);
+    if (chatHistory.length > 20) chatHistory.pop();
+    renderHistory();
+}
+
+function renderHistory() {
+    const list = document.getElementById('historyList');
+    if (!list) return;
+    list.innerHTML = '';
+    chatHistory.forEach(entry => {
+        const item = document.createElement('div');
+        item.className = 'history-item' + (entry.sessionId === sessionId ? ' active' : '');
+        item.textContent = entry.title;
+        item.title = entry.title;
+        list.appendChild(item);
+    });
+}
+
+// ─────────────────────────────────────────────
+// NEW CHAT
+// ─────────────────────────────────────────────
 
 async function startNewChat() {
     // Clear server session
@@ -201,37 +257,19 @@ async function startNewChat() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: sessionId })
         });
-    } catch (err) { /* ignore */ }
+    } catch (_) { }
 
-    // Reset client state
+    // Reset state
     sessionId = generateSessionId();
     lastAnalysisResult = null;
     lastDraftText = null;
 
-    // Reset UI
+    // Clear chat area and restore empty state
     const chatArea = document.getElementById('chatArea');
     chatArea.innerHTML = '';
 
-    // Re-add welcome message
-    const welcomeDiv = document.createElement('div');
-    welcomeDiv.className = 'bot-message welcome-message animate-in';
-    welcomeDiv.innerHTML = `
-        <div class="avatar bot-avatar">
-            <i data-lucide="scale" style="width:18px;height:18px"></i>
-        </div>
-        <div class="message-content">
-            <p><strong>Namaste!</strong> I am JusticeBot, your free legal aid assistant for Indian law.</p>
-            <p>Tell me about your legal problem — whether it's a consumer dispute,
-                tenant issue, workplace problem, RTI query, or criminal matter.
-                I will explain your rights and guide you step by step.</p>
-            <p class="upload-hint"><i data-lucide="paperclip" style="width:13px;height:13px"></i> You can also upload a contract or agreement for clause analysis.</p>
-        </div>
-    `;
-    chatArea.appendChild(welcomeDiv);
-
-    // Uncollapse header
-    const header = document.getElementById('mainHeader');
-    if (header) header.classList.remove('collapsed');
+    const emptyState = document.getElementById('emptyState');
+    if (emptyState) emptyState.classList.remove('hidden');
 
     // Reset upload status
     const uploadStatus = document.getElementById('uploadStatus');
@@ -240,176 +278,264 @@ async function startNewChat() {
         uploadStatus.style.color = '';
     }
 
-    // Clear domain highlight
-    document.querySelectorAll('.domain-list li').forEach(li => li.classList.remove('active'));
-
-    // Close sidebar on mobile
-    closeSidebar();
-
-    if (window.lucide) lucide.createIcons();
-}
-
-// ── SELECT DOMAIN (clickable sidebar items) ──
-
-function selectDomain(domain, placeholder) {
+    // Reset textarea
     const input = document.getElementById('userInput');
-    input.value = placeholder;
-    input.focus();
-    autoResize(input);
+    input.value = '';
+    input.style.height = 'auto';
+
+    // Update history active state
+    renderHistory();
+
     closeSidebar();
+    input.focus();
 }
 
-// ── HIGHLIGHT ACTIVE DOMAIN ──
+// ─────────────────────────────────────────────
+// SEND MESSAGE
+// ─────────────────────────────────────────────
 
-function highlightDomain(domain) {
-    const items = document.querySelectorAll('.domain-list li');
-    items.forEach(li => {
-        li.classList.remove('active');
-        const liDomain = li.getAttribute('data-domain');
-        if (liDomain && domain && domain.toLowerCase().includes(liDomain)) {
-            li.classList.add('active');
-        }
-    });
-}
+async function sendMessage() {
+    if (isLoading) return;
 
-// ── RENDER ANALYSIS RESULT ──
+    const input = document.getElementById('userInput');
+    const query = input.value.trim();
+    if (!query) return;
 
-function renderAnalysisResult(data) {
-    const chatArea = document.getElementById('chatArea');
-    const delay = 120; // stagger delay in ms
-
-    // Domain badge
-    const domainDiv = createAnimatedMessage(`
-        <div class="avatar bot-avatar">
-            <i data-lucide="compass" style="width:18px;height:18px"></i>
-        </div>
-        <div class="result-card">
-            <h3>Domain Classified</h3>
-            <span class="domain-badge">${escapeHTML(data.domain)}</span>
-            <p style="font-size:13px; color:var(--text-secondary)">
-                Confidence: ${data.confidence}% &nbsp;·&nbsp; 
-                Key facts extracted: ${data.key_facts.length}
-            </p>
-        </div>
-    `, 0);
-    chatArea.appendChild(domainDiv);
-
-    // Rights summary
-    const rightsDiv = createAnimatedMessage(`
-        <div class="avatar bot-avatar">
-            <i data-lucide="scroll-text" style="width:18px;height:18px"></i>
-        </div>
-        <div class="result-card">
-            <h3>Your Legal Rights</h3>
-            <p class="rights-text">${escapeHTML(data.rights_summary)}</p>
-        </div>
-    `, delay);
-    chatArea.appendChild(rightsDiv);
-
-    // Legal sections — NOW CLICKABLE
-    const sectionsHTML = data.legal_sections.map(s =>
-        `<li class="section-clickable" onclick="explainSection(this)" data-section="${escapeAttr(s)}">${escapeHTML(s)}<i data-lucide="info" style="width:14px;height:14px" class="section-info-icon"></i></li>`
-    ).join('');
-
-    const sectionsDiv = createAnimatedMessage(`
-        <div class="avatar bot-avatar">
-            <i data-lucide="book-open" style="width:18px;height:18px"></i>
-        </div>
-        <div class="result-card">
-            <h3>Applicable Law Sections</h3>
-            <p style="font-size:12px; color:var(--text-tertiary); margin-bottom:10px">Click any section to learn more</p>
-            <ul class="sections-list">${sectionsHTML}</ul>
-        </div>
-    `, delay * 2);
-    chatArea.appendChild(sectionsDiv);
-
-    // Case strength meter
-    const strength = data.case_strength;
-    const strengthColor = strength >= 70 ? 'var(--success)' :
-        strength >= 40 ? 'var(--warning)' : 'var(--danger)';
-    const strengthLabel = strength >= 70 ? 'Strong Case' :
-        strength >= 40 ? 'Moderate Case' : 'Weak Case';
-
-    const strengthDiv = createAnimatedMessage(`
-        <div class="avatar bot-avatar">
-            <i data-lucide="bar-chart-3" style="width:18px;height:18px"></i>
-        </div>
-        <div class="result-card">
-            <h3>Case Strength</h3>
-            <div class="strength-bar-container">
-                <div class="strength-bar-bg">
-                    <div class="strength-bar-fill" 
-                         style="width:0%; background:${strengthColor}"
-                         data-target-width="${strength}%"></div>
-                </div>
-                <span class="strength-label" style="color:${strengthColor}">
-                    ${strength}% — ${strengthLabel}
-                </span>
-            </div>
-        </div>
-    `, delay * 3);
-    chatArea.appendChild(strengthDiv);
-
-    // Animate the strength bar fill after it appears
-    setTimeout(() => {
-        const fill = strengthDiv.querySelector('.strength-bar-fill');
-        if (fill) {
-            fill.style.width = fill.getAttribute('data-target-width');
-        }
-    }, delay * 3 + 300);
-
-    // Next steps
-    const stepsHTML = data.next_steps.map(s => `<li>${escapeHTML(s)}</li>`).join('');
-
-    const stepsDiv = createAnimatedMessage(`
-        <div class="avatar bot-avatar">
-            <i data-lucide="list-checks" style="width:18px;height:18px"></i>
-        </div>
-        <div class="result-card">
-            <h3>Recommended Next Steps</h3>
-            <ol class="steps-list">${stepsHTML}</ol>
-        </div>
-    `, delay * 4);
-    chatArea.appendChild(stepsDiv);
-
-    // Re-initialize Lucide icons for new elements
-    if (window.lucide) lucide.createIcons();
-
-    // Smooth scroll to bottom
-    setTimeout(() => {
-        chatArea.scrollTo({
-            top: chatArea.scrollHeight,
-            behavior: 'smooth'
-        });
-    }, delay * 5);
-}
-
-// ── DOCUMENT UPLOAD & ANALYSIS ──
-
-async function analyzeDocument(input) {
-    const file = input.files[0];
-    if (!file) return;
-
-    // File size check (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-        const status = document.getElementById('uploadStatus');
-        status.textContent = 'File too large (max 5MB)';
-        status.style.color = 'var(--danger)';
-        input.value = '';
+    if (query.length > 3000) {
+        appendBotMessage('Your message is too long. Please keep it under 3,000 characters.');
         return;
     }
 
-    collapseHeader();
+    appendUserMessage(query);
+    input.value = '';
+    input.style.height = 'auto';
+
+    setLoading(true);
+    const thinkingId = appendThinking();
+
+    try {
+        const response = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, session_id: sessionId })
+        });
+
+        const data = await response.json();
+        removeThinking(thinkingId);
+
+        if (!response.ok || data.error) {
+            appendBotMessage(data.error || 'Something went wrong. Please try again.');
+            return;
+        }
+
+        lastAnalysisResult = data;
+        renderAnalysisResult(data);
+
+    } catch (_) {
+        removeThinking(thinkingId);
+        appendBotMessage('Connection error. Please check that the server is running.');
+    } finally {
+        setLoading(false);
+    }
+}
+
+function handleInputKeydown(event) {
+    // Enter sends; Shift+Enter inserts newline
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
+// ─────────────────────────────────────────────
+// RENDER ANALYSIS RESULT
+// ─────────────────────────────────────────────
+
+function renderAnalysisResult(data) {
+    const chatArea = document.getElementById('chatArea');
+
+    // ── 1 · Rights summary — flat bot text ──
+    const rightsRow = document.createElement('div');
+    rightsRow.className = 'message-row bot-row';
+    rightsRow.innerHTML = `
+        <div>
+            <div class="bot-text"><p>${escapeHTML(data.rights_summary)}</p></div>
+            <div class="msg-meta">${now()}</div>
+        </div>`;
+    chatArea.appendChild(rightsRow);
+
+    // ── 2 · Grouped result cards ──
+    const group = document.createElement('div');
+    group.className = 'message-row bot-row';
+    group.style.flexDirection = 'column';
+    group.style.alignItems = 'flex-start';
+    group.style.gap = '0';
+
+    let html = '';
+
+    // Legal sections
+    if (data.legal_sections && data.legal_sections.length > 0) {
+        const sectionsHTML = data.legal_sections.map(s => `
+            <li class="section-item"
+                onclick="explainSection(this)"
+                data-section="${escapeAttr(s)}">
+                <span>${escapeHTML(s)}</span>
+                <span class="section-item-hint">
+                    <i data-lucide="info" style="width:13px;height:13px"></i>
+                </span>
+            </li>`).join('');
+
+        html += `
+            <p class="result-label">Applicable Law</p>
+            <div class="card-group">
+                <ul class="sections-list">${sectionsHTML}</ul>
+            </div>`;
+    }
+
+    // Case strength arc
+    const strength = Math.max(0, Math.min(100, data.case_strength || 0));
+    const arcCircumf = 220;
+    const arcOffset = arcCircumf - (arcCircumf * strength / 100);
+    const verdict = strength >= 70 ? 'Strong case' : strength >= 40 ? 'Moderate case' : 'Needs support';
+    const arcColor = strength >= 70
+        ? 'rgba(80,200,140,0.55)'
+        : strength >= 40
+            ? 'rgba(255,185,80,0.45)'
+            : 'rgba(255,100,100,0.45)';
+
+    html += `
+        <p class="result-label" style="margin-top:14px">Case Strength</p>
+        <div class="result-card">
+            <div class="strength-arc-wrap">
+                <div class="strength-arc">
+                    <svg viewBox="0 0 80 80">
+                        <circle class="arc-bg"   cx="40" cy="40" r="35"/>
+                        <circle class="arc-fill" cx="40" cy="40" r="35"
+                            data-offset="${arcOffset}"
+                            data-color="${arcColor}"
+                            style="stroke-dashoffset:${arcCircumf}"/>
+                    </svg>
+                    <div class="arc-label">${strength}</div>
+                </div>
+                <div class="strength-meta">
+                    <div class="strength-verdict">${verdict}</div>
+                    <div class="strength-sub">${data.confidence || 0}% classification confidence</div>
+                </div>
+            </div>
+        </div>`;
+
+    // Next steps
+    if (data.next_steps && data.next_steps.length > 0) {
+        const stepsHTML = data.next_steps.map(s =>
+            `<li class="step-item">${escapeHTML(s)}</li>`
+        ).join('');
+
+        html += `
+            <p class="result-label" style="margin-top:14px">Next Steps</p>
+            <div class="result-card">
+                <ol class="steps-list">${stepsHTML}</ol>
+            </div>`;
+    }
+
+    group.innerHTML = `<div style="padding:2px 24px;width:100%">${html}</div>`;
+    chatArea.appendChild(group);
+    icons();
+
+    // Animate arc after paint
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            const arc = chatArea.querySelector('.arc-fill[data-offset]');
+            if (!arc) return;
+            const target = arc.getAttribute('data-offset');
+            const color = arc.getAttribute('data-color');
+            arc.style.strokeDashoffset = target;
+            arc.style.stroke = color;
+        }, 120);
+    });
+
+    // ── 3 · Action chips ──
+    renderActionChips(data);
+
+    scrollToBottom();
+}
+
+// ─────────────────────────────────────────────
+// ACTION CHIPS
+// ─────────────────────────────────────────────
+
+function renderActionChips(data) {
+    const chatArea = document.getElementById('chatArea');
+
+    // Remove any previous chip row
+    const old = chatArea.querySelector('.action-chips');
+    if (old) old.remove();
+
+    const chips = [];
+    const domain = (data.domain || '').toLowerCase();
+
+    // Draft chip — contextual based on domain
+    if (domain === 'criminal') {
+        chips.push({ label: 'Draft FIR', icon: 'file-pen', action: () => requestDraft('fir') });
+    } else if (domain === 'rti') {
+        chips.push({ label: 'Draft RTI Application', icon: 'file-pen', action: () => requestDraft('rti') });
+    } else if (domain === 'consumer') {
+        chips.push({ label: 'Draft Complaint', icon: 'file-pen', action: () => requestDraft('consumer') });
+    } else {
+        chips.push({ label: 'Draft Legal Notice', icon: 'file-pen', action: () => requestDraft('notice') });
+    }
+
+    chips.push({ label: 'Find Legal Help Nearby', icon: 'map-pin', action: () => openLegalAidFinder() });
+    chips.push({ label: 'Analyse a Document', icon: 'paperclip', action: () => document.getElementById('docUpload').click() });
+
+    const row = document.createElement('div');
+    row.className = 'action-chips';
+
+    chips.forEach(({ label, icon, action }) => {
+        const btn = document.createElement('button');
+        btn.className = 'chip';
+        btn.innerHTML = `<i data-lucide="${icon}" style="width:13px;height:13px"></i>${escapeHTML(label)}`;
+        btn.onclick = () => {
+            row.remove();   // chips disappear once clicked
+            action();
+        };
+        row.appendChild(btn);
+    });
+
+    chatArea.appendChild(row);
+    icons();
+    scrollToBottom();
+}
+
+// ─────────────────────────────────────────────
+// DOCUMENT UPLOAD & ANALYSIS
+// ─────────────────────────────────────────────
+
+async function handleDocUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
     const status = document.getElementById('uploadStatus');
-    status.textContent = `Analyzing ${file.name}...`;
+
+    if (file.size > 5 * 1024 * 1024) {
+        status.textContent = 'File too large (max 5 MB)';
+        status.style.color = 'var(--danger)';
+        event.target.value = '';
+        return;
+    }
+
+    hideEmptyState();
+    status.textContent = `Attached: ${file.name}`;
     status.style.color = 'var(--text-secondary)';
+
+    // Show user bubble with filename
+    appendUserMessage(`📎 ${file.name}`);
 
     const formData = new FormData();
     formData.append('file', file);
     formData.append('session_id', sessionId);
 
     setLoading(true);
-    const thinkingId = appendThinking(`Analyzing ${file.name}...`);
+    const thinkingId = appendThinking();
 
     try {
         const response = await fetch('/api/document', {
@@ -423,129 +549,129 @@ async function analyzeDocument(input) {
         if (!response.ok || data.error) {
             status.textContent = 'Analysis failed';
             status.style.color = 'var(--danger)';
-            appendBotMessage(escapeHTML(data.error || 'Document analysis failed.'));
+            appendBotMessage(data.error || 'Document analysis failed.');
             return;
         }
 
-        status.textContent = `✓ ${file.name} analyzed`;
-        status.style.color = 'var(--success)';
+        status.textContent = `✓ ${file.name}`;
+        status.style.color = 'var(--safe)';
         renderDocumentResult(data);
 
-        // Clear status after 5 seconds
         setTimeout(() => {
             status.textContent = '';
             status.style.color = '';
         }, 5000);
 
-    } catch (err) {
+    } catch (_) {
         removeThinking(thinkingId);
         status.textContent = 'Upload failed';
         status.style.color = 'var(--danger)';
         appendBotMessage('Document upload failed. Please try again.');
     } finally {
         setLoading(false);
-        input.value = ''; // Reset file input
+        event.target.value = '';
     }
 }
 
+// ─────────────────────────────────────────────
+// RENDER DOCUMENT RESULT
+// ─────────────────────────────────────────────
+
 function renderDocumentResult(data) {
     const chatArea = document.getElementById('chatArea');
-    const delay = 120;
 
-    // Summary card
-    const summaryDiv = createAnimatedMessage(`
-        <div class="avatar bot-avatar">
-            <i data-lucide="file-search" style="width:18px;height:18px"></i>
-        </div>
-        <div class="result-card">
-            <h3>Document Summary</h3>
-            <p class="rights-text">${escapeHTML(data.document_summary)}</p>
-            <p style="font-size:12px; color:var(--text-tertiary); margin-top:10px">
-                Total clauses reviewed: ${data.total_clauses_reviewed || data.clauses.length}
-            </p>
-        </div>
-    `, 0);
-    chatArea.appendChild(summaryDiv);
-
-    // Clause cards
-    const clausesDiv = document.createElement('div');
-    clausesDiv.className = 'bot-message animate-in';
-    clausesDiv.style.animationDelay = `${delay}ms`;
-
-    let clausesHTML = '<div style="max-width:780px; width:100%">';
-    clausesHTML += `<div class="result-card" style="margin-bottom:12px">
-        <h3>Clause Analysis — Heatmap</h3>
-    </div>`;
-
-    data.clauses.forEach(clause => {
-        // FIX: risk_level flows from LLM output → DOM class attribute.
-        // Whitelisting here prevents stored XSS even if the backend
-        // sanitisation step is ever bypassed or misconfigured.
-        const safeRisk = sanitizeRiskLevel(clause.risk_level);
-        clausesHTML += `
-            <div class="clause-card ${safeRisk}">
-                <span class="risk-badge ${safeRisk}">${escapeHTML(safeRisk)}</span>
-                <div class="clause-title">${escapeHTML(clause.clause_title)}</div>
-                <div class="clause-text">"${escapeHTML(clause.clause_text)}"</div>
-                <div class="clause-explanation">${escapeHTML(clause.explanation)}</div>
-                <div class="clause-recommendation">💡 ${escapeHTML(clause.recommendation)}</div>
+    // Summary as flat bot text
+    const summaryRow = document.createElement('div');
+    summaryRow.className = 'message-row bot-row';
+    summaryRow.innerHTML = `
+        <div>
+            <div class="bot-text">
+                <p>${escapeHTML(data.document_summary)}</p>
+                <p style="color:var(--text-tertiary);font-size:12px;margin-top:4px">
+                    ${data.total_clauses_reviewed || data.clauses.length} clauses reviewed
+                </p>
             </div>
-        `;
-    });
+            <div class="msg-meta">${now()}</div>
+        </div>`;
+    chatArea.appendChild(summaryRow);
 
-    clausesHTML += '</div>';
-    clausesDiv.innerHTML = `
-        <div class="avatar bot-avatar">
-            <i data-lucide="search" style="width:18px;height:18px"></i>
-        </div>
-        ${clausesHTML}
-    `;
-    chatArea.appendChild(clausesDiv);
+    // Clause cards — expandable inset list
+    if (data.clauses && data.clauses.length > 0) {
+        const clauseRow = document.createElement('div');
+        clauseRow.className = 'message-row bot-row';
 
-    if (window.lucide) lucide.createIcons();
+        // Sort: dangerous → questionable → safe
+        const order = { dangerous: 0, questionable: 1, safe: 2 };
+        const sorted = [...data.clauses].sort((a, b) =>
+            (order[sanitizeRiskLevel(a.risk_level)] || 2) -
+            (order[sanitizeRiskLevel(b.risk_level)] || 2)
+        );
 
-    setTimeout(() => {
-        chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-    }, delay * 2);
+        let clauseHTML = '<div class="clause-group">';
+        sorted.forEach(clause => {
+            const risk = sanitizeRiskLevel(clause.risk_level);
+            clauseHTML += `
+                <div class="clause-card ${risk}" onclick="toggleClause(this)">
+                    <div class="clause-header">
+                        <span class="risk-dot ${risk}"></span>
+                        <span class="clause-title-text">${escapeHTML(clause.clause_title)}</span>
+                        <i data-lucide="chevron-down" style="width:14px;height:14px" class="clause-toggle"></i>
+                    </div>
+                    <div class="clause-body">
+                        ${clause.clause_text ? `
+                            <p class="clause-excerpt">${escapeHTML(clause.clause_text)}</p>` : ''}
+                        <p class="clause-explanation">${escapeHTML(clause.explanation)}</p>
+                        <p class="clause-recommendation">${escapeHTML(clause.recommendation)}</p>
+                    </div>
+                </div>`;
+        });
+        clauseHTML += '</div>';
+
+        clauseRow.innerHTML = `<div style="padding:2px 24px;width:100%">${clauseHTML}</div>`;
+        chatArea.appendChild(clauseRow);
+    }
+
+    icons();
+    scrollToBottom();
 }
 
-// ── DRAFT DOCUMENTS ──
+function toggleClause(card) {
+    card.classList.toggle('open');
+}
+
+// ─────────────────────────────────────────────
+// REQUEST DRAFT DOCUMENT
+// ─────────────────────────────────────────────
 
 async function requestDraft(draftType) {
     if (!lastAnalysisResult) {
         appendBotMessage('Please describe your legal problem first before requesting a draft document.');
-        closeSidebar();
         return;
     }
-
     if (isLoading) return;
 
-    closeSidebar();
     setLoading(true);
-    const thinkingId = appendThinking(`Drafting ${draftType.toUpperCase()} document...`);
+    const thinkingId = appendThinking();
 
     try {
         const response = await fetch('/api/draft', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                draft_type: draftType,
-                session_id: sessionId
-            })
+            body: JSON.stringify({ draft_type: draftType, session_id: sessionId })
         });
 
         const data = await response.json();
         removeThinking(thinkingId);
 
         if (!response.ok || data.error) {
-            appendBotMessage(escapeHTML(data.error || 'Failed to generate draft.'));
+            appendBotMessage(data.error || 'Failed to generate draft.');
             return;
         }
 
         lastDraftText = data.draft;
         showModal(`Draft ${draftType.toUpperCase()} Document`, data.draft);
 
-    } catch (err) {
+    } catch (_) {
         removeThinking(thinkingId);
         appendBotMessage('Failed to generate draft. Please try again.');
     } finally {
@@ -553,13 +679,14 @@ async function requestDraft(draftType) {
     }
 }
 
-// ── SECTION EXPLANATION (NEW) ──
+// ─────────────────────────────────────────────
+// SECTION EXPLANATION MODAL
+// ─────────────────────────────────────────────
 
 async function explainSection(el) {
     const sectionText = el.getAttribute('data-section');
     if (!sectionText) return;
 
-    // Open the section modal
     const overlay = document.getElementById('sectionModalOverlay');
     const modal = document.getElementById('sectionModal');
     const title = document.getElementById('sectionModalTitle');
@@ -572,10 +699,9 @@ async function explainSection(el) {
 
     overlay.style.display = 'block';
     modal.style.display = 'flex';
-    if (window.lucide) lucide.createIcons();
+    icons();
 
-    // Close on Escape
-    document.addEventListener('keydown', handleSectionModalKeyDown);
+    document.addEventListener('keydown', _sectionEsc);
 
     try {
         const response = await fetch('/api/explain-section', {
@@ -587,11 +713,10 @@ async function explainSection(el) {
         const data = await response.json();
 
         if (!response.ok || data.error) {
-            loading.innerHTML = `<p style="color:var(--danger)">Could not explain this section. Please try again.</p>`;
+            loading.innerHTML = `<p style="color:var(--danger);font-size:13px">Could not explain this section. Please try again.</p>`;
             return;
         }
 
-        // Populate fields
         document.getElementById('sectionAct').textContent = data.act || 'N/A';
         document.getElementById('sectionExplanation').textContent = data.explanation || 'No explanation available.';
         document.getElementById('sectionPunishment').textContent = data.punishment || 'Not specified.';
@@ -600,36 +725,93 @@ async function explainSection(el) {
         loading.style.display = 'none';
         content.style.display = 'block';
 
-    } catch (err) {
-        loading.innerHTML = `<p style="color:var(--danger)">Connection error. Please try again.</p>`;
+    } catch (_) {
+        loading.innerHTML = `<p style="color:var(--danger);font-size:13px">Connection error. Please try again.</p>`;
     }
 }
 
 function closeSectionModal() {
-    const overlay = document.getElementById('sectionModalOverlay');
-    const modal = document.getElementById('sectionModal');
+    _animateModalOut('sectionModal', 'sectionModalOverlay');
+    document.removeEventListener('keydown', _sectionEsc);
+}
 
-    modal.style.animation = 'modalOut 0.25s var(--ease-out) forwards';
-    overlay.style.animation = 'fadeOutAnim 0.25s var(--ease-out) forwards';
+function _sectionEsc(e) { if (e.key === 'Escape') closeSectionModal(); }
+
+// ─────────────────────────────────────────────
+// DRAFT MODAL
+// ─────────────────────────────────────────────
+
+function showModal(title, content) {
+    document.getElementById('modalTitleText').textContent = title;
+
+    const body = document.getElementById('modalBody');
+    body.innerHTML = _formatDraftText(content);
+
+    document.getElementById('modalOverlay').style.display = 'block';
+    document.getElementById('resultModal').style.display = 'flex';
+    icons();
+
+    document.addEventListener('keydown', _modalEsc);
+}
+
+function _formatDraftText(text) {
+    if (!text) return '';
+    let t = escapeHTML(text);
+    t = t.replace(/\n\n/g, '</p><p>');
+    t = t.replace(/\n/g, '<br>');
+    return `<p>${t}</p>`;
+}
+
+function closeModal() {
+    _animateModalOut('resultModal', 'modalOverlay');
+    document.removeEventListener('keydown', _modalEsc);
+}
+
+function _modalEsc(e) { if (e.key === 'Escape') closeModal(); }
+
+function _animateModalOut(modalId, overlayId) {
+    const modal = document.getElementById(modalId);
+    const overlay = document.getElementById(overlayId);
+    if (!modal || !overlay) return;
+
+    modal.style.animation = 'modalOut 0.22s var(--ease) forwards';
+    overlay.style.animation = 'fadeOut  0.22s var(--ease) forwards';
 
     setTimeout(() => {
         overlay.style.display = 'none';
         modal.style.display = 'none';
         modal.style.animation = '';
         overlay.style.animation = '';
-    }, 250);
-
-    document.removeEventListener('keydown', handleSectionModalKeyDown);
+    }, 230);
 }
 
-function handleSectionModalKeyDown(e) {
-    if (e.key === 'Escape') closeSectionModal();
-}
+// ─────────────────────────────────────────────
+// COPY + DOWNLOAD
+// ─────────────────────────────────────────────
 
-// ── PDF DOWNLOAD ──
+async function copyDraftToClipboard() {
+    const text = lastDraftText || document.getElementById('modalBody').textContent;
+    const btn = document.getElementById('copyDraftBtn');
+    const orig = btn.innerHTML;
+
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (_) {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    }
+
+    btn.innerHTML = '<i data-lucide="check" style="width:14px;height:14px"></i> Copied!';
+    icons();
+    setTimeout(() => { btn.innerHTML = orig; icons(); }, 2000);
+}
 
 async function downloadPDF() {
-    // Guard: ensure we have data to generate PDF from
     if (!lastAnalysisResult && !lastDraftText) {
         appendBotMessage('No analysis data available. Please analyze a legal query first.');
         closeModal();
@@ -637,10 +819,10 @@ async function downloadPDF() {
     }
 
     const btn = document.getElementById('downloadPdfBtn');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i data-lucide="loader-2" style="width:16px;height:16px" class="spin"></i> Generating...';
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i data-lucide="loader-2" style="width:14px;height:14px" class="loading-icon"></i> Generating…';
     btn.disabled = true;
-    if (window.lucide) lucide.createIcons();
+    icons();
 
     try {
         const response = await fetch('/api/pdf', {
@@ -653,143 +835,45 @@ async function downloadPDF() {
             })
         });
 
-        // BUG fix: check response.ok before treating as PDF
         if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error || 'PDF generation failed');
+            const err = await response.json();
+            throw new Error(err.error || 'PDF generation failed');
         }
 
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = 'JusticeBot_Report.pdf';
         a.click();
-        window.URL.revokeObjectURL(url);
+        URL.revokeObjectURL(url);
 
-        btn.innerHTML = '<i data-lucide="check" style="width:16px;height:16px"></i> Downloaded!';
-        if (window.lucide) lucide.createIcons();
-        setTimeout(() => {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            if (window.lucide) lucide.createIcons();
-        }, 2000);
+        btn.innerHTML = '<i data-lucide="check" style="width:14px;height:14px"></i> Downloaded!';
+        icons();
+        setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; icons(); }, 2200);
 
-    } catch (err) {
-        btn.innerHTML = originalText;
+    } catch (_) {
+        btn.innerHTML = orig;
         btn.disabled = false;
-        if (window.lucide) lucide.createIcons();
+        icons();
         appendBotMessage('PDF generation failed. Please try again.');
     }
 }
 
-// ── COPY TO CLIPBOARD ──
-
-async function copyDraftToClipboard() {
-    const btn = document.getElementById('copyDraftBtn');
-    const text = lastDraftText || document.getElementById('modalBody').textContent;
-
-    try {
-        await navigator.clipboard.writeText(text);
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i data-lucide="check" style="width:16px;height:16px"></i> Copied!';
-        if (window.lucide) lucide.createIcons();
-        setTimeout(() => {
-            btn.innerHTML = originalText;
-            if (window.lucide) lucide.createIcons();
-        }, 2000);
-    } catch (err) {
-        // Fallback
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i data-lucide="check" style="width:16px;height:16px"></i> Copied!';
-        if (window.lucide) lucide.createIcons();
-        setTimeout(() => {
-            btn.innerHTML = originalText;
-            if (window.lucide) lucide.createIcons();
-        }, 2000);
-    }
-}
-
-// ── MODAL (for drafts) ──
-
-function showModal(title, content) {
-    document.getElementById('modalTitle').innerHTML = `
-        <i data-lucide="file-text" style="width:18px;height:18px"></i>
-        <span>${escapeHTML(title)}</span>
-    `;
-
-    // Render draft text with basic formatting (preserve paragraphs & line breaks)
-    const modalBody = document.getElementById('modalBody');
-    modalBody.innerHTML = formatDraftText(content);
-
-    document.getElementById('modalOverlay').style.display = 'block';
-    document.getElementById('resultModal').style.display = 'flex';
-    if (window.lucide) lucide.createIcons();
-
-    // Trap focus & close on Escape
-    document.addEventListener('keydown', handleModalKeyDown);
-}
-
-function formatDraftText(text) {
-    if (!text) return '';
-    // Escape HTML first, then add line break formatting
-    let formatted = escapeHTML(text);
-    // Convert double newlines to paragraph breaks
-    formatted = formatted.replace(/\n\n/g, '</p><p>');
-    // Convert single newlines to line breaks
-    formatted = formatted.replace(/\n/g, '<br>');
-    // Wrap in paragraph
-    return `<p>${formatted}</p>`;
-}
-
-function closeModal() {
-    const overlay = document.getElementById('modalOverlay');
-    const modal = document.getElementById('resultModal');
-
-    // Animate out
-    modal.style.animation = 'modalOut 0.25s var(--ease-out) forwards';
-    overlay.style.animation = 'fadeOutAnim 0.25s var(--ease-out) forwards';
-
-    setTimeout(() => {
-        overlay.style.display = 'none';
-        modal.style.display = 'none';
-        modal.style.animation = '';
-        overlay.style.animation = '';
-    }, 250);
-
-    document.removeEventListener('keydown', handleModalKeyDown);
-}
-
-function handleModalKeyDown(e) {
-    if (e.key === 'Escape') closeModal();
-}
-
-// ══════════════════════════════════════════════════
-// ── LEGAL AID FINDER ──
-// ══════════════════════════════════════════════════
+// ─────────────────────────────────────────────
+// LEGAL AID FINDER
+// ─────────────────────────────────────────────
 
 function openLegalAidFinder() {
     closeSidebar();
-
     const overlay = document.getElementById('legalAidOverlay');
     const modal = document.getElementById('legalAidModal');
-
     overlay.style.display = 'block';
     modal.style.display = 'flex';
+    icons();
 
-    if (window.lucide) lucide.createIcons();
+    document.addEventListener('keydown', _legalAidEsc);
 
-    // Close on Escape
-    document.addEventListener('keydown', handleLegalAidKeyDown);
-
-    // Initialize map if not already
     setTimeout(() => {
         if (!legalAidMap) {
             initLegalAidMap();
@@ -800,37 +884,22 @@ function openLegalAidFinder() {
 }
 
 function closeLegalAidFinder() {
-    const overlay = document.getElementById('legalAidOverlay');
-    const modal = document.getElementById('legalAidModal');
-
-    modal.style.animation = 'legalAidModalOut 0.3s var(--ease-out) forwards';
-    overlay.style.animation = 'fadeOutAnim 0.3s var(--ease-out) forwards';
-
-    setTimeout(() => {
-        overlay.style.display = 'none';
-        modal.style.display = 'none';
-        modal.style.animation = '';
-        overlay.style.animation = '';
-    }, 300);
-
-    document.removeEventListener('keydown', handleLegalAidKeyDown);
+    _animateModalOut('legalAidModal', 'legalAidOverlay');
+    document.removeEventListener('keydown', _legalAidEsc);
 }
 
-function handleLegalAidKeyDown(e) {
-    if (e.key === 'Escape') closeLegalAidFinder();
-}
+function _legalAidEsc(e) { if (e.key === 'Escape') closeLegalAidFinder(); }
 
 function initLegalAidMap() {
     const mapEl = document.getElementById('legalAidMap');
-    if (!mapEl) return;
+    if (!mapEl || legalAidMap) return;
 
-    // Default to center of India
     legalAidMap = L.map('legalAidMap', {
         zoomControl: true,
         attributionControl: true
     }).setView([20.5937, 78.9629], 5);
 
-    // Use dark Carto tiles to match the app theme
+    // Dark Carto tiles matching the app theme
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
         subdomains: 'abcd',
@@ -839,89 +908,78 @@ function initLegalAidMap() {
 }
 
 function setLegalAidStatus(text, type = 'info') {
-    const statusDiv = document.getElementById('legalAidStatus');
-    const statusText = document.getElementById('legalAidStatusText');
-    statusDiv.style.display = 'flex';
-    statusText.textContent = text;
-
-    statusDiv.className = 'legal-aid-status';
-    if (type === 'success') statusDiv.classList.add('status-success');
-    else if (type === 'error') statusDiv.classList.add('status-error');
-    else if (type === 'loading') statusDiv.classList.add('status-loading');
-
-    if (window.lucide) lucide.createIcons();
+    const wrap = document.getElementById('legalAidStatus');
+    const span = document.getElementById('legalAidStatusText');
+    wrap.style.display = 'flex';
+    span.textContent = text;
+    wrap.className = 'legal-aid-status';
+    if (type !== 'info') wrap.classList.add(`status-${type}`);
+    icons();
 }
 
 function hideLegalAidStatus() {
     document.getElementById('legalAidStatus').style.display = 'none';
 }
 
-// ── AUTO-DETECT LOCATION ──
+// ── Auto-detect ──
 
 function autoDetectLocation() {
     const btn = document.getElementById('locationDetectBtn');
     btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" style="width:16px;height:16px" class="spin"></i><span>Detecting...</span>';
-    if (window.lucide) lucide.createIcons();
+    btn.innerHTML = '<i data-lucide="loader-2" style="width:15px;height:15px" class="loading-icon"></i><span>Detecting…</span>';
+    icons();
 
-    setLegalAidStatus('Detecting your location...', 'loading');
+    setLegalAidStatus('Detecting your location…', 'loading');
 
     if (!navigator.geolocation) {
         setLegalAidStatus('Geolocation is not supported by your browser.', 'error');
-        resetDetectBtn(btn);
+        _resetDetectBtn(btn);
         return;
     }
 
     navigator.geolocation.getCurrentPosition(
-        async (position) => {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
+        async (pos) => {
+            const { latitude: lat, longitude: lng } = pos.coords;
+            setLegalAidStatus('Location found — searching nearby resources…', 'loading');
 
-            setLegalAidStatus(`Location detected! Searching nearby legal resources...`, 'loading');
-
-            // Reverse geocode to get address + state
             let detectedState = '';
             try {
-                const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`, {
-                    headers: { 'Accept-Language': 'en' }
-                });
-                const geoData = await geoRes.json();
-                const addr = geoData.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-                document.getElementById('locationInput').value = addr;
-                detectedState = (geoData.address && geoData.address.state) || '';
-            } catch (e) {
+                const r = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`,
+                    { headers: { 'Accept-Language': 'en' } }
+                );
+                const d = await r.json();
+                document.getElementById('locationInput').value = d.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                detectedState = (d.address && d.address.state) || '';
+            } catch (_) {
                 document.getElementById('locationInput').value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
             }
 
-            // Center map and place user marker
             centerMapOnLocation(lat, lng);
-
-            // Search nearby courts & police
             await searchNearbyLegalAid(lat, lng);
-
-            // Fetch DLSA legal aid for detected state
             if (detectedState) fetchDLSAForState(detectedState);
-
-            resetDetectBtn(btn);
+            _resetDetectBtn(btn);
         },
-        (error) => {
-            let msg = 'Location access denied. Please enable location permission or enter an address manually.';
-            if (error.code === error.TIMEOUT) msg = 'Location request timed out. Please try again.';
-            if (error.code === error.POSITION_UNAVAILABLE) msg = 'Position unavailable. Please enter your address.';
-            setLegalAidStatus(msg, 'error');
-            resetDetectBtn(btn);
+        (err) => {
+            const msgs = {
+                [err.PERMISSION_DENIED]: 'Location access denied. Please enable permission or enter an address.',
+                [err.TIMEOUT]: 'Location request timed out. Please try again.',
+                [err.POSITION_UNAVAILABLE]: 'Position unavailable. Please enter your address.',
+            };
+            setLegalAidStatus(msgs[err.code] || 'Could not detect location.', 'error');
+            _resetDetectBtn(btn);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
 }
 
-function resetDetectBtn(btn) {
+function _resetDetectBtn(btn) {
     btn.disabled = false;
-    btn.innerHTML = '<i data-lucide="crosshair" style="width:16px;height:16px"></i><span>Auto-detect Location</span>';
-    if (window.lucide) lucide.createIcons();
+    btn.innerHTML = '<i data-lucide="crosshair" style="width:15px;height:15px"></i><span>Auto-detect</span>';
+    icons();
 }
 
-// ── SEARCH BY ADDRESS ──
+// ── Search by address ──
 
 async function searchByAddress() {
     const input = document.getElementById('locationInput');
@@ -932,68 +990,56 @@ async function searchByAddress() {
         return;
     }
 
-    setLegalAidStatus('Geocoding your address...', 'loading');
+    setLegalAidStatus('Geocoding…', 'loading');
 
     try {
-        // Add "India" to the query for better results
-        const query = address.toLowerCase().includes('india') ? address : `${address}, India`;
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&addressdetails=1`, {
-            headers: { 'Accept-Language': 'en' }
-        });
-        const data = await response.json();
+        const q = address.toLowerCase().includes('india') ? address : `${address}, India`;
+        const r = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1&addressdetails=1`,
+            { headers: { 'Accept-Language': 'en' } }
+        );
+        const d = await r.json();
 
-        if (!data || data.length === 0) {
-            setLegalAidStatus('Could not find that location. Try a different address or pincode.', 'error');
+        if (!d || d.length === 0) {
+            setLegalAidStatus('Location not found. Try a different address or pincode.', 'error');
             return;
         }
 
-        const lat = parseFloat(data[0].lat);
-        const lng = parseFloat(data[0].lon);
+        const lat = parseFloat(d[0].lat);
+        const lng = parseFloat(d[0].lon);
+        input.value = d[0].display_name;
 
-        // Update input with the found address
-        input.value = data[0].display_name;
-
-        // Extract state from address details
-        const addrDetails = data[0].address || {};
-        const detectedState = addrDetails.state || '';
-
+        const state = (d[0].address || {}).state || '';
         centerMapOnLocation(lat, lng);
-        setLegalAidStatus('Searching nearby courts & police stations...', 'loading');
+        setLegalAidStatus('Searching nearby courts & police stations…', 'loading');
         await searchNearbyLegalAid(lat, lng);
+        if (state) fetchDLSAForState(state);
 
-        // Fetch DLSA legal aid for detected state
-        if (detectedState) fetchDLSAForState(detectedState);
-
-    } catch (err) {
+    } catch (_) {
         setLegalAidStatus('Geocoding failed. Please try again.', 'error');
     }
 }
 
-// ── CENTER MAP ──
+// ── Map helpers ──
 
 function centerMapOnLocation(lat, lng) {
     if (!legalAidMap) return;
 
-    // Hide placeholder
     const placeholder = document.getElementById('mapPlaceholder');
     if (placeholder) placeholder.style.display = 'none';
 
     legalAidMap.setView([lat, lng], 14);
 
-    // Remove old user marker
-    if (userLocationMarker) {
-        legalAidMap.removeLayer(userLocationMarker);
-    }
+    if (userLocationMarker) legalAidMap.removeLayer(userLocationMarker);
 
-    // Add user location marker with custom icon
-    const userIcon = L.divIcon({
+    const icon = L.divIcon({
         className: 'user-location-marker',
-        html: `<div class="user-marker-pulse"></div><div class="user-marker-dot"></div>`,
+        html: '<div class="user-marker-pulse"></div><div class="user-marker-dot"></div>',
         iconSize: [24, 24],
         iconAnchor: [12, 12]
     });
 
-    userLocationMarker = L.marker([lat, lng], { icon: userIcon })
+    userLocationMarker = L.marker([lat, lng], { icon })
         .addTo(legalAidMap)
         .bindPopup('<strong>Your Location</strong>')
         .openPopup();
@@ -1001,16 +1047,38 @@ function centerMapOnLocation(lat, lng) {
     legalAidMap.invalidateSize();
 }
 
-// ── SEARCH NEARBY LEGAL AID ──
-// FIX: overpass-api.de frequently rate-limits, rejects browser CORS pre-flights,
-// and stalls the tab indefinitely (no timeout in the original code).
-//
-// Replacement strategy:
-//   1. Try each Overpass mirror in sequence, with a 12 s AbortController timeout.
-//   2. If all mirrors fail, fall back to Nominatim place-search which has no
-//      CORS restrictions and is already used for reverse-geocoding elsewhere.
-//
-// No new API keys required — both services are public OSM infrastructure.
+function createMapMarker(result) {
+    const cfg = categoryConfig[result.category] || categoryConfig.court;
+    const icon = L.divIcon({
+        className: 'custom-map-marker',
+        html: `<div class="map-marker-pin">
+                   <i data-lucide="${cfg.icon}" style="width:14px;height:14px;color:rgba(255,255,255,0.85)"></i>
+               </div>`,
+        iconSize: [30, 42],
+        iconAnchor: [15, 42],
+        popupAnchor: [0, -42]
+    });
+
+    const marker = L.marker([result.lat, result.lng], { icon }).addTo(legalAidMap);
+    marker.bindPopup(`
+        <div class="map-popup">
+            <strong>${escapeHTML(result.name)}</strong>
+            <span class="popup-category">${cfg.label}</span>
+            ${result.address ? `<span class="popup-address">${escapeHTML(result.address)}</span>` : ''}
+            <span class="popup-distance">${result.distance.toFixed(1)} km away</span>
+            ${result.phone ? `<a href="tel:${result.phone}" class="popup-phone">📞 ${escapeHTML(result.phone)}</a>` : ''}
+        </div>`);
+
+    setTimeout(() => icons(), 100);
+    return marker;
+}
+
+const categoryConfig = {
+    court: { icon: 'landmark', label: 'Court' },
+    police: { icon: 'shield', label: 'Police Station' },
+};
+
+// ── Overpass / Nominatim search ──
 
 const OVERPASS_ENDPOINTS = [
     'https://overpass-api.de/api/interpreter',
@@ -1020,60 +1088,50 @@ const OVERPASS_ENDPOINTS = [
 
 async function _fetchOverpass(query, timeoutMs = 12000) {
     for (const endpoint of OVERPASS_ENDPOINTS) {
-        const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), timeoutMs);
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), timeoutMs);
         try {
-            const res = await fetch(endpoint, {
+            const r = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `data=${encodeURIComponent(query)}`,
-                signal: controller.signal,
+                signal: ctrl.signal,
             });
             clearTimeout(tid);
-            if (!res.ok) continue;
-            return await res.json();
+            if (!r.ok) continue;
+            return await r.json();
         } catch (_) {
             clearTimeout(tid);
-            // Endpoint timed out or rejected — try the next one
         }
     }
-    return null; // all endpoints failed → caller uses Nominatim fallback
+    return null;
 }
 
 async function _searchViaNominatim(lat, lng) {
-    // Nominatim text-based search for each category within the bounding box.
-    // Using q= parameter instead of amenity= because:
-    //   - "office=lawyer" is not a Nominatim amenity
-    //   - "legal_aid" amenity tags are extremely rare in India's OSM data
-    //   - Text search finds actual business names like "Advocate Sharma" or "District Court"
-    // Only search for courts and police — lawyers/legal aid are handled
-    // separately via the DLSA backend data
     const queries = [
-        { q: 'court',          category: 'court' },
+        { q: 'court', category: 'court' },
         { q: 'district court', category: 'court' },
         { q: 'police station', category: 'police' },
-        { q: 'police',         category: 'police' },
+        { q: 'police', category: 'police' },
     ];
 
     const results = [];
     const seenIds = new Set();
-
-    // Wider bounding box (~20 km) for better coverage
     const boxSize = 0.2;
 
     for (const { q, category } of queries) {
         try {
-            const controller = new AbortController();
-            const tid = setTimeout(() => controller.abort(), 8000);
-            const res = await fetch(
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 8000);
+            const r = await fetch(
                 `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}` +
                 `&viewbox=${lng - boxSize},${lat + boxSize},${lng + boxSize},${lat - boxSize}` +
                 `&bounded=1&limit=8&addressdetails=1`,
-                { headers: { 'Accept-Language': 'en' }, signal: controller.signal }
+                { headers: { 'Accept-Language': 'en' }, signal: ctrl.signal }
             );
             clearTimeout(tid);
-            const data = await res.json();
-            data.forEach(item => {
+            const d = await r.json();
+            d.forEach(item => {
                 if (seenIds.has(item.place_id)) return;
                 seenIds.add(item.place_id);
                 const iLat = parseFloat(item.lat);
@@ -1090,22 +1148,18 @@ async function _searchViaNominatim(lat, lng) {
                     website: '',
                 });
             });
-            // Small delay between requests to respect Nominatim's rate limit (1 req/sec)
-            await new Promise(r => setTimeout(r, 300));
-        } catch (_) { /* skip this query */ }
+            await new Promise(r => setTimeout(r, 300)); // Nominatim rate limit
+        } catch (_) { }
     }
     return results;
 }
 
 async function searchNearbyLegalAid(lat, lng) {
-    // Clear old markers
     legalAidMarkers.forEach(m => legalAidMap.removeLayer(m));
     legalAidMarkers = [];
     legalAidResults = [];
 
-    const radius = 10000; // 10 km
-
-    // Only search courts & police — legal aid is handled via DLSA backend data
+    const radius = 10000;
     const overpassQuery = `
 [out:json][timeout:20];
 (
@@ -1122,55 +1176,41 @@ out skel qt;`.trim();
     let usedFallback = false;
 
     try {
-        // ── Try Overpass (multiple mirrors, with timeout) ──────────────────
         const overpassData = await _fetchOverpass(overpassQuery);
 
         if (overpassData) {
-            const elements = overpassData.elements || [];
-            elements.forEach(el => {
+            (overpassData.elements || []).forEach(el => {
                 const elLat = el.lat || (el.center && el.center.lat);
                 const elLng = el.lon || (el.center && el.center.lon);
                 if (!elLat || !elLng) return;
-
                 const tags = el.tags || {};
-                const name = tags.name || tags['name:en'] || categorizePlace(tags);
-                const category = getCategory(tags);
-
+                const name = tags.name || tags['name:en'] || _categorizePlace(tags);
                 if (!name || name === 'Unknown') return;
-
                 legalAidResults.push({
                     id: el.id,
                     name,
-                    category,
+                    category: _getCategory(tags),
                     lat: elLat,
                     lng: elLng,
                     distance: getDistanceKm(lat, lng, elLat, elLng),
-                    address: buildAddress(tags),
+                    address: _buildAddress(tags),
                     phone: tags.phone || tags['contact:phone'] || '',
                     website: tags.website || tags['contact:website'] || '',
                 });
             });
         } else {
-            // ── Nominatim fallback ─────────────────────────────────────────
             usedFallback = true;
-            const fallbackResults = await _searchViaNominatim(lat, lng);
-            legalAidResults.push(...fallbackResults);
+            legalAidResults.push(...await _searchViaNominatim(lat, lng));
         }
 
-        // Sort by distance
         legalAidResults.sort((a, b) => a.distance - b.distance);
+        legalAidResults.forEach(r => legalAidMarkers.push(createMapMarker(r)));
 
-        // Add markers
-        legalAidResults.forEach(result => {
-            legalAidMarkers.push(createMapMarker(result));
-        });
-
-        // Reset tab state
         currentLegalAidFilter = 'all';
-        renderLegalAidResults();
         document.querySelectorAll('.lai-tab').forEach(t => t.classList.remove('active'));
         const allTab = document.querySelector('.lai-tab[data-category="all"]');
         if (allTab) allTab.classList.add('active');
+        renderLegalAidResults();
 
         if (legalAidResults.length > 0) {
             const note = usedFallback ? ' (via Nominatim)' : '';
@@ -1180,45 +1220,101 @@ out skel qt;`.trim();
                 legalAidMap.fitBounds(group.getBounds().pad(0.1));
             }
         } else {
-            setLegalAidStatus('No legal resources found nearby. Try a wider search or enter a city centre.', 'info');
+            setLegalAidStatus('No resources found nearby. Try a wider search or a city centre.', 'info');
         }
 
-    } catch (err) {
-        console.error('Legal aid search error:', err);
-        setLegalAidStatus('Search failed. Please try again or enter a different location.', 'error');
+    } catch (_) {
+        setLegalAidStatus('Search failed. Please try again.', 'error');
     }
 }
 
-// ── FETCH DLSA LEGAL AID FOR STATE ──
+function renderLegalAidResults() {
+    const listEl = document.getElementById('legalAidList');
+    const emptyEl = document.getElementById('legalAidEmpty');
+
+    const filtered = currentLegalAidFilter === 'all'
+        ? legalAidResults
+        : legalAidResults.filter(r => r.category === currentLegalAidFilter);
+
+    listEl.querySelectorAll('.lai-card').forEach(c => c.remove());
+
+    if (filtered.length === 0) {
+        emptyEl.style.display = 'flex';
+        emptyEl.innerHTML = `
+            <i data-lucide="search-x" style="width:36px;height:36px;opacity:0.3"></i>
+            <p>${legalAidResults.length === 0
+                ? 'Search a location to find<br>legal resources near you'
+                : 'No results in this category'}</p>`;
+        icons();
+        return;
+    }
+
+    emptyEl.style.display = 'none';
+
+    filtered.forEach((result, idx) => {
+        const cfg = categoryConfig[result.category] || categoryConfig.court;
+        const card = document.createElement('div');
+        card.className = 'lai-card';
+        card.style.animationDelay = `${idx * 50}ms`;
+        card.innerHTML = `
+            <div class="lai-card-icon">
+                <i data-lucide="${cfg.icon}" style="width:18px;height:18px"></i>
+            </div>
+            <div class="lai-card-body">
+                <div class="lai-card-name">${escapeHTML(result.name)}</div>
+                <span class="lai-card-cat">${cfg.label}</span>
+                ${result.address ? `<span class="lai-card-addr">${escapeHTML(result.address)}</span>` : ''}
+                <div class="lai-card-meta">
+                    <span class="lai-card-dist">${result.distance.toFixed(1)} km</span>
+                    ${result.phone ? `<a href="tel:${result.phone}" class="lai-card-phone">📞 ${escapeHTML(result.phone)}</a>` : ''}
+                </div>
+            </div>
+            <button class="lai-card-locate" onclick="focusOnMarker(${result.lat},${result.lng})" title="Show on map">
+                <i data-lucide="map-pin" style="width:16px;height:16px"></i>
+            </button>`;
+        listEl.appendChild(card);
+    });
+    icons();
+}
+
+function filterLegalAidResults(category) {
+    currentLegalAidFilter = category;
+    document.querySelectorAll('.lai-tab').forEach(t =>
+        t.classList.toggle('active', t.getAttribute('data-category') === category));
+    renderLegalAidResults();
+}
+
+function focusOnMarker(lat, lng) {
+    if (!legalAidMap) return;
+    legalAidMap.setView([lat, lng], 17);
+    legalAidMarkers.forEach(m => {
+        const p = m.getLatLng();
+        if (Math.abs(p.lat - lat) < 0.0001 && Math.abs(p.lng - lng) < 0.0001) m.openPopup();
+    });
+}
+
+// ── DLSA card ──
 
 async function fetchDLSAForState(state) {
     const container = document.getElementById('dlsaCardContainer');
     const card = document.getElementById('dlsaCard');
-
     if (!container || !card) return;
 
-    // Normalize state name for the API
     const stateName = state.trim();
-    if (!stateName) {
-        container.style.display = 'none';
-        return;
-    }
+    if (!stateName) { container.style.display = 'none'; return; }
 
     try {
         const res = await fetch(`/api/dlsa?state=${encodeURIComponent(stateName)}`);
         const data = await res.json();
 
         if (!res.ok || data.error) {
-            // Try without spaces/diacritics — e.g. "National Capital Territory of Delhi" → "Delhi"
-            const shortState = stateName.replace(/^.*of\s+/i, '').trim();
-            if (shortState !== stateName) {
-                return fetchDLSAForState(shortState);
-            }
+            // Try stripping "National Capital Territory of …" etc.
+            const short = stateName.replace(/^.*of\s+/i, '').trim();
+            if (short !== stateName) return fetchDLSAForState(short);
             container.style.display = 'none';
             return;
         }
 
-        // Render the DLSA card
         card.innerHTML = `
             <div class="dlsa-authority">${escapeHTML(data.authority || 'Legal Services Authority')}</div>
             <div class="dlsa-state-label">${escapeHTML(stateName)}</div>
@@ -1240,274 +1336,68 @@ async function fetchDLSAForState(state) {
             <div class="dlsa-helpline">
                 <i data-lucide="phone-call" style="width:14px;height:14px"></i>
                 <span>NALSA Helpline: <strong>15100</strong> (toll-free)</span>
-            </div>
-        `;
+            </div>`;
 
         container.style.display = 'block';
-        if (window.lucide) lucide.createIcons();
+        icons();
 
-    } catch (err) {
-        console.error('DLSA fetch error:', err);
+    } catch (_) {
         container.style.display = 'none';
     }
 }
 
-// ── HELPER FUNCTIONS ──
+// ─────────────────────────────────────────────
+// GEO HELPERS
+// ─────────────────────────────────────────────
 
-function getCategory(tags) {
-    if (tags.amenity === 'courthouse' || (tags.building === 'government' && /court|judicial/i.test(tags.name || '')))
-        return 'court';
-    if (tags.amenity === 'police') return 'police';
-    return 'court'; // default
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function categorizePlace(tags) {
+function _getCategory(tags) {
+    if (tags.amenity === 'courthouse' ||
+        (tags.building === 'government' && /court|judicial/i.test(tags.name || '')))
+        return 'court';
+    if (tags.amenity === 'police') return 'police';
+    return 'court';
+}
+
+function _categorizePlace(tags) {
     if (tags.amenity === 'courthouse') return 'Court';
     if (tags.amenity === 'police') return 'Police Station';
     return 'Unknown';
 }
 
-function buildAddress(tags) {
-    const parts = [
+function _buildAddress(tags) {
+    return [
         tags['addr:housenumber'],
         tags['addr:street'],
         tags['addr:city'],
         tags['addr:district'],
         tags['addr:state'],
         tags['addr:postcode']
-    ].filter(Boolean);
-    return parts.join(', ') || '';
+    ].filter(Boolean).join(', ');
 }
 
-function getDistanceKm(lat1, lon1, lat2, lon2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
+// ─────────────────────────────────────────────
+// INJECTED KEYFRAMES
+// ─────────────────────────────────────────────
 
-const categoryConfig = {
-    court: { color: '#818cf8', icon: 'landmark', label: 'Court' },
-    police: { color: '#f87171', icon: 'badge', label: 'Police Station' },
-};
-
-function createMapMarker(result) {
-    const config = categoryConfig[result.category] || categoryConfig.court;
-
-    const icon = L.divIcon({
-        className: 'custom-map-marker',
-        html: `<div class="map-marker-pin" style="background:${config.color}">
-                   <i data-lucide="${config.icon}" style="width:14px;height:14px;color:white"></i>
-               </div>`,
-        iconSize: [30, 42],
-        iconAnchor: [15, 42],
-        popupAnchor: [0, -42]
-    });
-
-    const marker = L.marker([result.lat, result.lng], { icon: icon }).addTo(legalAidMap);
-
-    const popupContent = `
-        <div class="map-popup">
-            <strong>${escapeHTML(result.name)}</strong>
-            <span class="popup-category" style="color:${config.color}">${config.label}</span>
-            ${result.address ? `<span class="popup-address">${escapeHTML(result.address)}</span>` : ''}
-            <span class="popup-distance">${result.distance.toFixed(1)} km away</span>
-            ${result.phone ? `<a href="tel:${result.phone}" class="popup-phone">📞 ${escapeHTML(result.phone)}</a>` : ''}
-        </div>
-    `;
-
-    marker.bindPopup(popupContent);
-
-    // Re-init lucide icons after marker is added
-    setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 100);
-
-    return marker;
-}
-
-// ── RENDER RESULTS LIST ──
-
-function renderLegalAidResults() {
-    const listEl = document.getElementById('legalAidList');
-    const emptyEl = document.getElementById('legalAidEmpty');
-
-    const filtered = currentLegalAidFilter === 'all'
-        ? legalAidResults
-        : legalAidResults.filter(r => r.category === currentLegalAidFilter);
-
-    if (filtered.length === 0) {
-        emptyEl.style.display = 'flex';
-        emptyEl.innerHTML = `
-            <i data-lucide="search-x" style="width:36px;height:36px"></i>
-            <p>${legalAidResults.length === 0 ? 'Search for a location to find<br>legal resources near you' : 'No results in this category'}</p>
-        `;
-        if (window.lucide) lucide.createIcons();
-        // Remove old cards
-        listEl.querySelectorAll('.lai-card').forEach(c => c.remove());
-        return;
-    }
-
-    emptyEl.style.display = 'none';
-    // Remove old cards
-    listEl.querySelectorAll('.lai-card').forEach(c => c.remove());
-
-    filtered.forEach((result, idx) => {
-        const config = categoryConfig[result.category] || categoryConfig.court;
-        const card = document.createElement('div');
-        card.className = 'lai-card';
-        card.style.animationDelay = `${idx * 50}ms`;
-        card.innerHTML = `
-            <div class="lai-card-icon" style="background:${config.color}20; color:${config.color}">
-                <i data-lucide="${config.icon}" style="width:18px;height:18px"></i>
-            </div>
-            <div class="lai-card-body">
-                <div class="lai-card-name">${escapeHTML(result.name)}</div>
-                <span class="lai-card-cat" style="color:${config.color}">${config.label}</span>
-                ${result.address ? `<span class="lai-card-addr">${escapeHTML(result.address)}</span>` : ''}
-                <div class="lai-card-meta">
-                    <span class="lai-card-dist">${result.distance.toFixed(1)} km</span>
-                    ${result.phone ? `<a href="tel:${result.phone}" class="lai-card-phone">📞 ${escapeHTML(result.phone)}</a>` : ''}
-                </div>
-            </div>
-            <button class="lai-card-locate" onclick="focusOnMarker(${result.lat}, ${result.lng})" title="Show on map">
-                <i data-lucide="map-pin" style="width:16px;height:16px"></i>
-            </button>
-        `;
-        listEl.appendChild(card);
-    });
-
-    if (window.lucide) lucide.createIcons();
-}
-
-function filterLegalAidResults(category) {
-    currentLegalAidFilter = category;
-
-    // Update tab state
-    document.querySelectorAll('.lai-tab').forEach(t => {
-        t.classList.toggle('active', t.getAttribute('data-category') === category);
-    });
-
-    renderLegalAidResults();
-}
-
-function focusOnMarker(lat, lng) {
-    if (!legalAidMap) return;
-    legalAidMap.setView([lat, lng], 17);
-
-    // Find and open the marker's popup
-    legalAidMarkers.forEach(m => {
-        const pos = m.getLatLng();
-        if (Math.abs(pos.lat - lat) < 0.0001 && Math.abs(pos.lng - lng) < 0.0001) {
-            m.openPopup();
-        }
-    });
-}
-
-// ── CHAT HELPERS ──
-
-function appendUserMessage(text) {
-    const chatArea = document.getElementById('chatArea');
-    const div = document.createElement('div');
-    div.className = 'user-message animate-in';
-    div.innerHTML = `<div class="user-bubble">${escapeHTML(text)}</div>`;
-    chatArea.appendChild(div);
-    chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-}
-
-function appendBotMessage(text) {
-    const chatArea = document.getElementById('chatArea');
-    const div = document.createElement('div');
-    div.className = 'bot-message animate-in';
-    // text is already escaped by callers, but use escapeHTML for safety on any remaining raw calls
-    div.innerHTML = `
-        <div class="avatar bot-avatar">
-            <i data-lucide="scale" style="width:18px;height:18px"></i>
-        </div>
-        <div class="message-content"><p>${text}</p></div>
-    `;
-    chatArea.appendChild(div);
-    if (window.lucide) lucide.createIcons();
-    chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-}
-
-function appendThinking(label) {
-    const chatArea = document.getElementById('chatArea');
-    const id = 'thinking_' + Date.now();
-    const div = document.createElement('div');
-    div.className = 'thinking-message';
-    div.id = id;
-    div.innerHTML = `
-        <div class="avatar bot-avatar">
-            <i data-lucide="scale" style="width:18px;height:18px"></i>
-        </div>
-        <div class="thinking-content">
-            <div class="thinking-dots">
-                <span></span><span></span><span></span>
-            </div>
-            <span class="thinking-label">${escapeHTML(label || 'Thinking...')}</span>
-        </div>
-    `;
-    chatArea.appendChild(div);
-    if (window.lucide) lucide.createIcons();
-    chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-    return id;
-}
-
-function removeThinking(id) {
-    const el = document.getElementById(id);
-    if (el) {
-        el.style.animation = 'fadeOutAnim 0.2s var(--ease-out) forwards';
-        setTimeout(() => el.remove(), 200);
-    }
-}
-
-// ── UTILITY ──
-
-function createAnimatedMessage(innerHTML, delayMs) {
-    const div = document.createElement('div');
-    div.className = 'bot-message animate-in';
-    div.style.animationDelay = `${delayMs}ms`;
-    div.innerHTML = innerHTML;
-    return div;
-}
-
-function escapeHTML(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
-function escapeAttr(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-// ── CSS ANIMATION FOR MODAL EXIT ──
-// Inject keyframes for modal exit animation
-const styleSheet = document.createElement('style');
-styleSheet.textContent = `
+const _ks = document.createElement('style');
+_ks.textContent = `
     @keyframes modalOut {
-        from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        to { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+        from { opacity:1; transform:translate(-50%,-50%) scale(1); }
+        to   { opacity:0; transform:translate(-50%,-48%) scale(0.97); }
     }
-    @keyframes fadeOutAnim {
-        from { opacity: 1; }
-        to { opacity: 0; }
-    }
-    @keyframes legalAidModalOut {
-        from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        to { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
-    }
-    .spin {
-        animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
+    @keyframes fadeOut {
+        from { opacity:1; }
+        to   { opacity:0; }
     }
 `;
-document.head.appendChild(styleSheet);
+document.head.appendChild(_ks);
