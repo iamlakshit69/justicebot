@@ -1,0 +1,239 @@
+{
+  "metadata": {
+    "application": "JusticeBot",
+    "generated_at": "2026-04-06T12:47:57.125061"
+  },
+  "metrics": {
+    "latencies": {
+      "GET / returns 200 OK": 2.76,
+      "GET /api/dlsa valid for Punjab": 0.23,
+      "GET /api/dlsa handles 404 cleanly": 0.16,
+      "POST /api/draft handles missing context properly": 0.2
+    }
+  },
+  "summary": {
+    "PASS": 31,
+    "FAIL": 0,
+    "WARN": 0,
+    "INFO": 0
+  },
+  "details": [
+    {
+      "category": "Env",
+      "test": "Python 3.14",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Env",
+      "test": "Dependency flask loaded",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Env",
+      "test": "Dependency dotenv loaded",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Env",
+      "test": "Dependency groq loaded",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Env",
+      "test": "Dependency fitz loaded",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Env",
+      "test": "Dependency docx loaded",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Env",
+      "test": "Dependency fpdf loaded",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Env",
+      "test": "Dependency matplotlib loaded",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Env",
+      "test": "Dependency reportlab loaded",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Config",
+      "test": "config.py loaded",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Config",
+      "test": "GROQ_API_KEY present",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Config",
+      "test": "MODELS present",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Config",
+      "test": "TEMPERATURE present",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Config",
+      "test": "APP_TITLE present",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module memory.session built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module data.dlsa_offices built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module utils.dlsa built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module utils.doc_parser built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module utils.pdf_export built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module agents.router built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module agents.legal_advisor built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module agents.doc_analyzer built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module agents.drafter built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module prompts.legal_prompts built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Modules",
+      "test": "Module prompts.draft_prompts built correctly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Utils",
+      "test": "Session created successfully",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Utils",
+      "test": "DLSA Lookup works (Delhi)",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0
+    },
+    {
+      "category": "Routes",
+      "test": "GET / returns 200 OK",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 2.76
+    },
+    {
+      "category": "Routes",
+      "test": "GET /api/dlsa valid for Punjab",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0.23
+    },
+    {
+      "category": "Routes",
+      "test": "GET /api/dlsa handles 404 cleanly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0.16
+    },
+    {
+      "category": "Routes",
+      "test": "POST /api/draft handles missing context properly",
+      "status": "PASS",
+      "detail": "",
+      "duration_ms": 0.2
+    }
+  ]
+}

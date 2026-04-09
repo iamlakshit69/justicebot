@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JusticeBot — Free Legal Aid for Indian Citizens</title>
+    <meta name="description"
+        content="JusticeBot provides free AI-powered legal guidance for Indian citizens. Get rights analysis, case strength assessment, and draft legal documents instantly.">
+
+    <!-- Google Fonts — Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+    <!-- Leaflet CSS (required for map tiles + markers) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <!-- ANIMATED BACKGROUND MESH -->
+    <div class="bg-mesh" aria-hidden="true">
+        <div class="mesh-orb mesh-orb-1"></div>
+        <div class="mesh-orb mesh-orb-2"></div>
+        <div class="mesh-orb mesh-orb-3"></div>
+    </div>
+
+    <!-- SIDEBAR OVERLAY (mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-inner">
+            <!-- Logo -->
+            <div class="sidebar-logo">
+                <div class="logo-mark">
+                    <i data-lucide="scale" class="logo-icon-svg"></i>
+                </div>
+                <div class="logo-text-group">
+                    <span class="logo-text">JusticeBot</span>
+                    <span class="sidebar-tagline">Free Legal Aid</span>
+                </div>
+            </div>
+
+            <!-- New Chat -->
+            <button class="new-chat-btn" id="newChatBtn" onclick="startNewChat()">
+                <i data-lucide="plus" style="width:16px;height:16px"></i>
+                <span>New Conversation</span>
+            </button>
+
+            <!-- Domains -->
+            <div class="sidebar-section" style="animation-delay: 0.1s">
+                <p class="sidebar-label">
+                    <i data-lucide="compass" style="width:14px;height:14px"></i>
+                    Legal Domains
+                </p>
+                <ul class="domain-list" id="domainList">
+                    <li data-domain="consumer" onclick="selectDomain('consumer', 'I have a consumer protection issue')">
+                        <i data-lucide="shopping-cart" style="width:15px;height:15px"></i> Consumer Protection
+                    </li>
+                    <li data-domain="tenant" onclick="selectDomain('tenant', 'I have a tenant or property dispute')">
+                        <i data-lucide="home" style="width:15px;height:15px"></i> Tenant & Property
+                    </li>
+                    <li data-domain="labour" onclick="selectDomain('labour', 'I have a workplace or employment issue')">
+                        <i data-lucide="hard-hat" style="width:15px;height:15px"></i> Labour & Employment
+                    </li>
+                    <li data-domain="rti" onclick="selectDomain('rti', 'I want to file an RTI application')">
+                        <i data-lucide="file-text" style="width:15px;height:15px"></i> RTI Applications
+                    </li>
+                    <li data-domain="criminal" onclick="selectDomain('criminal', 'I need help with a criminal matter')">
+                        <i data-lucide="gavel" style="width:15px;height:15px"></i> Criminal Law
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Draft Documents -->
+            <div class="sidebar-section" style="animation-delay: 0.2s">
+                <p class="sidebar-label">
+                    <i data-lucide="file-edit" style="width:14px;height:14px"></i>
+                    Draft Documents
+                </p>
+                <div class="draft-buttons">
+                    <button class="draft-btn" id="draftFirBtn" onclick="requestDraft('fir')">
+                        <i data-lucide="clipboard-list" style="width:15px;height:15px"></i>
+                        <span>Draft FIR</span>
+                        <i data-lucide="arrow-right" style="width:14px;height:14px" class="btn-arrow"></i>
+                    </button>
+                    <button class="draft-btn" id="draftRtiBtn" onclick="requestDraft('rti')">
+                        <i data-lucide="file-text" style="width:15px;height:15px"></i>
+                        <span>Draft RTI</span>
+                        <i data-lucide="arrow-right" style="width:14px;height:14px" class="btn-arrow"></i>
+                    </button>
+                    <button class="draft-btn" id="draftConsumerBtn" onclick="requestDraft('consumer')">
+                        <i data-lucide="shopping-bag" style="width:15px;height:15px"></i>
+                        <span>Consumer Complaint</span>
+                        <i data-lucide="arrow-right" style="width:14px;height:14px" class="btn-arrow"></i>
+                    </button>
+                    <button class="draft-btn" id="draftNoticeBtn" onclick="requestDraft('notice')">
+                        <i data-lucide="mail" style="width:15px;height:15px"></i>
+                        <span>Legal Notice</span>
+                        <i data-lucide="arrow-right" style="width:14px;height:14px" class="btn-arrow"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Find Legal Aid — Opens Modal -->
+            <div class="sidebar-section" style="animation-delay: 0.3s">
+                <p class="sidebar-label">
+                    <i data-lucide="map-pin" style="width:14px;height:14px"></i>
+                    Find Legal Aid
+                </p>
+                <button class="legal-aid-open-btn" id="openLegalAidBtn" onclick="openLegalAidFinder()">
+                    <div class="legal-aid-open-btn-icon">
+                        <i data-lucide="map" style="width:20px;height:20px"></i>
+                    </div>
+                    <div class="legal-aid-open-btn-text">
+                        <span class="legal-aid-open-title">Find Nearby Legal Help</span>
+                        <span class="legal-aid-open-sub">Courts · Lawyers · Police · Legal Aid</span>
+                    </div>
+                    <i data-lucide="arrow-right" style="width:16px;height:16px" class="legal-aid-arrow"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Sidebar footer -->
+        <div class="sidebar-footer">
+            <p>Built with ❤️ for India</p>
+        </div>
+    </aside>
+
+    <!-- MOBILE SIDEBAR TOGGLE -->
+    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+        <i data-lucide="menu" style="width:20px;height:20px"></i>
+    </button>
+
+    <!-- MAIN CONTENT -->
+    <main class="main">
+
+        <!-- HEADER (collapsible) -->
+        <header class="header" id="mainHeader">
+            <div class="header-content">
+                <h1>Know Your Rights.<br><span class="header-gradient">Get Free Legal Help.</span></h1>
+                <p class="header-subtitle">Describe your legal problem in plain language. JusticeBot will explain your
+                    rights,
+                    cite exact law sections, assess your case strength, and help you draft documents.</p>
+            </div>
+        </header>
+
+        <!-- DISCLAIMER BANNER -->
+        <div class="disclaimer-banner" id="disclaimerBanner">
+            <i data-lucide="alert-triangle" style="width:14px;height:14px"></i>
+            <span>AI-generated legal guidance only. This is <strong>not</strong> a substitute for professional legal
+                advice.</span>
+            <button class="dismiss-disclaimer" onclick="dismissDisclaimer()" aria-label="Dismiss disclaimer">
+                <i data-lucide="x" style="width:12px;height:12px"></i>
+            </button>
+        </div>
+
+        <!-- CHAT AREA -->
+        <div class="chat-area" id="chatArea">
+            <div class="bot-message welcome-message animate-in">
+                <div class="avatar bot-avatar">
+                    <i data-lucide="scale" style="width:18px;height:18px"></i>
+                </div>
+                <div class="message-content">
+                    <p><strong>Namaste!</strong> I am JusticeBot, your free legal aid assistant for Indian law.</p>
+                    <p>Tell me about your legal problem — whether it's a consumer dispute,
+                        tenant issue, workplace problem, RTI query, or criminal matter.
+                        I will explain your rights and guide you step by step.</p>
+                    <p class="upload-hint"><i data-lucide="paperclip" style="width:13px;height:13px"></i> You can also
+                        upload a contract or agreement for clause analysis.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCROLL TO BOTTOM BUTTON -->
+        <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="scrollToBottom()" style="display:none;">
+            <i data-lucide="chevron-down" style="width:16px;height:16px"></i>
+        </button>
+
+        <!-- BOTTOM CONTROLS -->
+        <div class="bottom-controls">
+            <!-- DOCUMENT UPLOAD -->
+            <div class="upload-area">
+                <label for="docUpload" class="upload-label" id="uploadLabel">
+                    <i data-lucide="paperclip" style="width:16px;height:16px"></i>
+                    <span>Upload Document</span>
+                    <span class="upload-formats">PDF or DOCX · Max 5MB</span>
+                </label>
+                <input type="file" id="docUpload" accept=".pdf,.docx" onchange="analyzeDocument(this)">
+                <span id="uploadStatus" class="upload-status"></span>
+            </div>
+
+            <!-- INPUT AREA -->
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <textarea id="userInput" placeholder="Describe your legal problem here..." rows="1"
+                        onkeydown="handleKeyDown(event)" oninput="autoResize(this)"></textarea>
+                    <button class="send-btn" id="sendBtn" onclick="sendQuery()" aria-label="Send message">
+                        <i data-lucide="send" class="send-icon" style="width:18px;height:18px"></i>
+                        <i data-lucide="loader-2" class="loading-icon" style="width:18px;height:18px;display:none"></i>
+                    </button>
+                </div>
+                <p class="input-hint" id="inputHint"></p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- RESULT MODAL (for drafts) -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal()"></div>
+    <div class="modal" id="resultModal">
+        <div class="modal-header">
+            <h2 id="modalTitle">
+                <i data-lucide="file-text" style="width:18px;height:18px"></i>
+                <span>Legal Analysis</span>
+            </h2>
+            <button class="modal-close" id="modalCloseBtn" onclick="closeModal()">
+                <i data-lucide="x" style="width:18px;height:18px"></i>
+            </button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+        <div class="modal-footer">
+            <button class="copy-btn" id="copyDraftBtn" onclick="copyDraftToClipboard()">
+                <i data-lucide="copy" style="width:16px;height:16px"></i>
+                Copy Text
+            </button>
+            <button class="download-btn" id="downloadPdfBtn" onclick="downloadPDF()">
+                <i data-lucide="download" style="width:16px;height:16px"></i>
+                Download PDF Report
+            </button>
+        </div>
+    </div>
+
+    <!-- SECTION EXPLANATION MODAL -->
+    <div class="section-modal-overlay" id="sectionModalOverlay" onclick="closeSectionModal()"></div>
+    <div class="section-modal" id="sectionModal">
+        <div class="section-modal-header">
+            <div class="section-modal-icon">
+                <i data-lucide="book-open" style="width:20px;height:20px"></i>
+            </div>
+            <h3 id="sectionModalTitle">Section Details</h3>
+            <button class="modal-close" onclick="closeSectionModal()">
+                <i data-lucide="x" style="width:18px;height:18px"></i>
+            </button>
+        </div>
+        <div class="section-modal-body" id="sectionModalBody">
+            <div class="section-loading" id="sectionLoading">
+                <div class="thinking-dots"><span></span><span></span><span></span></div>
+                <p>Fetching explanation...</p>
+            </div>
+            <div class="section-content" id="sectionContent" style="display:none">
+                <div class="section-info-row">
+                    <span class="section-info-label">Act</span>
+                    <span class="section-info-value" id="sectionAct"></span>
+                </div>
+                <div class="section-info-divider"></div>
+                <div class="section-info-block">
+                    <span class="section-info-label">What it means</span>
+                    <p id="sectionExplanation"></p>
+                </div>
+                <div class="section-info-block">
+                    <span class="section-info-label">Punishment / Remedy</span>
+                    <p id="sectionPunishment"></p>
+                </div>
+                <div class="section-info-block example-block">
+                    <span class="section-info-label">
+                        <i data-lucide="lightbulb" style="width:14px;height:14px"></i>
+                        Example Scenario
+                    </span>
+                    <p id="sectionExample"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LEGAL AID FINDER MODAL -->
+    <div class="legal-aid-overlay" id="legalAidOverlay" onclick="closeLegalAidFinder()"></div>
+    <div class="legal-aid-modal" id="legalAidModal">
+        <div class="legal-aid-header">
+            <div class="legal-aid-title-row">
+                <div class="legal-aid-title-icon">
+                    <i data-lucide="map-pin" style="width:22px;height:22px"></i>
+                </div>
+                <div>
+                    <h2>Find Legal Help Near You</h2>
+                    <p class="legal-aid-subtitle">Discover courts, lawyers, legal aid centers & police stations around
+                        your location</p>
+                </div>
+            </div>
+            <button class="modal-close" onclick="closeLegalAidFinder()">
+                <i data-lucide="x" style="width:20px;height:20px"></i>
+            </button>
+        </div>
+
+        <div class="legal-aid-content">
+            <!-- Location Controls -->
+            <div class="legal-aid-location-bar">
+                <button class="location-detect-btn" id="locationDetectBtn" onclick="autoDetectLocation()">
+                    <i data-lucide="crosshair" style="width:16px;height:16px"></i>
+                    <span>Auto-detect Location</span>
+                </button>
+                <div class="location-divider-text">or</div>
+                <div class="location-input-wrapper">
+                    <i data-lucide="search" style="width:16px;height:16px" class="location-search-icon"></i>
+                    <input type="text" id="locationInput" placeholder="Enter your address, city, or pincode..."
+                        onkeydown="if(event.key==='Enter') searchByAddress()">
+                    <button class="location-search-btn" onclick="searchByAddress()">
+                        <i data-lucide="arrow-right" style="width:16px;height:16px"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status bar -->
+            <div class="legal-aid-status" id="legalAidStatus" style="display:none">
+                <i data-lucide="info" style="width:14px;height:14px"></i>
+                <span id="legalAidStatusText"></span>
+            </div>
+
+            <!-- Main content: map + results -->
+            <div class="legal-aid-body">
+                <!-- Map -->
+                <div class="legal-aid-map-container">
+                    <div id="legalAidMap" class="legal-aid-map"></div>
+                    <div class="map-placeholder" id="mapPlaceholder">
+                        <i data-lucide="map" style="width:48px;height:48px"></i>
+                        <p>Allow location access or enter an address<br>to view the map</p>
+                    </div>
+                </div>
+
+                <!-- Results Panel -->
+                <div class="legal-aid-results" id="legalAidResults">
+                    <!-- Category Tabs -->
+                    <div class="legal-aid-tabs" id="legalAidTabs">
+                        <button class="lai-tab active" data-category="all" onclick="filterLegalAidResults('all')">
+                            <i data-lucide="layers" style="width:14px;height:14px"></i> All
+                        </button>
+                        <button class="lai-tab" data-category="court" onclick="filterLegalAidResults('court')">
+                            <i data-lucide="landmark" style="width:14px;height:14px"></i> Courts
+                        </button>
+                        <button class="lai-tab" data-category="police" onclick="filterLegalAidResults('police')">
+                            <i data-lucide="badge" style="width:14px;height:14px"></i> Police
+                        </button>
+                    </div>
+
+                    <!-- Results List -->
+                    <div class="legal-aid-list" id="legalAidList">
+                        <div class="legal-aid-empty" id="legalAidEmpty">
+                            <i data-lucide="compass" style="width:36px;height:36px"></i>
+                            <p>Search for a location to find<br>legal resources near you</p>
+                        </div>
+                    </div>
+
+                    <!-- DLSA Legal Aid Info Card (populated by JS from /api/dlsa) -->
+                    <div class="dlsa-card-container" id="dlsaCardContainer" style="display:none">
+                        <div class="dlsa-card-header">
+                            <i data-lucide="shield" style="width:16px;height:16px"></i>
+                            <span>Free Legal Aid Office</span>
+                        </div>
+                        <div class="dlsa-card" id="dlsaCard"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+    <script>
+        // Initialize Lucide icons after DOM load
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
