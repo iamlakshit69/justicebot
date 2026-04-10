@@ -13,9 +13,11 @@ from flask import Flask, request, jsonify, render_template, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import GROQ_API_KEY, MODELS, HOST, PORT, DEBUG 
-from memory.session import create_session, get_session, update_session, clear_session, add_message, get_messages
-from agents.router import run_router
-from agents.legal_advisor import run_advisor
+from memory.session import (
+    create_session, get_session, update_session, clear_session,
+    add_message, get_messages, get_case_file, update_case_file
+)
+from agents.conversation_agent import run_conversation
 from agents.doc_analyzer import run_doc_analyzer
 from agents.drafter import run_drafter
 from utils.doc_parser import parse_document
@@ -116,7 +118,7 @@ if not GROQ_API_KEY:
 else:
     logger.info("✅ GROQ_API_KEY loaded.")
 
-logger.info(f"🚀 Starting JusticeBot — DEBUG={DEBUG}")
+logger.info(f"🚀 Starting JusticeBot v2 — DEBUG={DEBUG}")
 
 
 # ── GET / ─────────────────────────────────────────────────────────────────────
@@ -127,6 +129,7 @@ def index():
 
 
 # ── POST /api/analyze ─────────────────────────────────────────────────────────
+# v2: Single conversation agent replaces the router → advisor pipeline.
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
@@ -150,47 +153,30 @@ def analyze():
 
     logger.info(f"Analyze — session={session_id[:12]}  query_len={len(query)}")
 
-    session = get_session(session_id)
-    history = get_messages(session_id)
+    # Get conversation state
+    history   = get_messages(session_id)
+    case_file = get_case_file(session_id)
 
-    try:
-        # Step 1 — Router classifies the legal domain
-        router_result = run_router(query, history)
-        domain     = router_result.get('domain') or 'unknown'
-        key_facts  = router_result.get('key_facts', [])
-        confidence = router_result.get('confidence', 0)
+    # Single agent call
+    result = run_conversation(query, history, case_file)
 
-        logger.info(f"Router → domain={domain}  confidence={confidence}%")
+    # Persist conversation turn
+    add_message(session_id, 'user',      query)
+    add_message(session_id, 'assistant', result['message'])
 
-        # Step 2 — Advisor provides legal guidance
-        advisor_result = run_advisor(query, domain, key_facts, history)
+    # Merge case file updates
+    if result.get('case_updates'):
+        update_case_file(session_id, result['case_updates'])
 
-        response = {
-            'domain':         domain,
-            'confidence':     confidence,
-            'key_facts':      key_facts,
-            'rights_summary': advisor_result.get('rights_summary', ''),
-            'legal_sections': advisor_result.get('legal_sections', []),
-            'case_strength':  advisor_result.get('case_strength', 0),
-            'next_steps':     advisor_result.get('next_steps', []),
-        }
+    # Persist other top-level fields
+    if result.get('domain'):
+        update_case_file(session_id, {'domain': result['domain']})
+    if result.get('phase'):
+        update_case_file(session_id, {'phase': result['phase']})
+    if result.get('draft_type'):
+        update_case_file(session_id, {'draft_type': result['draft_type']})
 
-        # FIX: Store the advisor result as valid JSON string, not Python repr.
-        # str(dict) produces single-quoted keys that are not valid JSON.
-        # LLMs degrade significantly when fed non-JSON history.
-        add_message(session_id, 'user', query)
-        add_message(session_id, 'assistant', json.dumps(advisor_result, ensure_ascii=False))
-
-        update_session(session_id, 'last_query',     query)
-        update_session(session_id, 'last_domain',    domain)
-        update_session(session_id, 'last_key_facts', key_facts)
-        update_session(session_id, 'last_result',    advisor_result)
-
-        return jsonify(response)
-
-    except Exception as e:
-        logger.error(f"Analyze error: {e}", exc_info=True)
-        return jsonify({'error': 'An error occurred while analysing your query. Please try again.'}), 500
+    return jsonify(result)
 
 
 # ── POST /api/document ────────────────────────────────────────────────────────
@@ -235,7 +221,14 @@ def document():
             if clause.get('risk_level') not in VALID_RISK_LEVELS:
                 clause['risk_level'] = 'safe'
 
-        update_session(session_id, 'last_document', doc_text)
+        # v2: Merge document summary into the case_file facts for context
+        # in subsequent conversation turns.
+        doc_summary = result.get('document_summary', '')
+        if doc_summary:
+            update_case_file(session_id, {
+                'facts': {'document_summary': doc_summary}
+            })
+
         return jsonify(result)
 
     except Exception as e:
@@ -262,22 +255,13 @@ def draft():
     if draft_type not in VALID_DRAFT_TYPES:
         return jsonify({'error': f'Invalid draft type. Must be one of: {", ".join(sorted(VALID_DRAFT_TYPES))}.'}), 400
 
-    session = get_session(session_id)
-    if not session or not session.get('last_query'):
-        return jsonify({'error': 'Session not found. Please analyse a query first.'}), 400
+    # v2: Read the full case_file from session
+    case_file = get_case_file(session_id)
 
     logger.info(f"Draft — session={session_id[:12]}  type={draft_type}")
 
-    context = {
-        'user_query':     session.get('last_query', ''),
-        'domain':         session.get('last_domain', ''),
-        'key_facts':      session.get('last_key_facts', []),
-        'rights_summary': session.get('last_result', {}).get('rights_summary', ''),
-        'next_steps':     session.get('last_result', {}).get('next_steps', []),
-    }
-
     try:
-        draft_text = run_drafter(draft_type, context)
+        draft_text = run_drafter(draft_type, case_file)
         return jsonify({'draft': draft_text})
 
     except Exception as e:

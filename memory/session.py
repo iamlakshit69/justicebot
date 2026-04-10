@@ -69,17 +69,64 @@ def _evict_oldest() -> None:
 
 
 def _make_session(session_id: str) -> dict:
-    """Return a fresh, empty session dict."""
+    """Return a fresh, empty session dict with v2 case_file structure."""
     return {
-        "messages":        [],
-        "last_query":      None,
-        "last_domain":     None,
-        "last_key_facts":  [],
-        "last_result":     {},
-        "last_document":   None,
-        "created_at":      datetime.now(timezone.utc).isoformat(),
-        "_last_accessed":  _now_ts(),
+        # Conversation history (list of role/content dicts)
+        "messages":     [],
+
+        # v2: structured case file — filled across turns
+        "case_file": {
+            "domain":          None,    # str: tenant | consumer | labour | rti | criminal
+            "phase":           "GATHERING",  # GATHERING | ADVISING | DRAFTING
+            "facts":           {},      # dict: any key-value facts extracted so far
+            "parties": {
+                "claimant":        None,    # str: user's full name
+                "claimant_addr":   None,    # str
+                "respondent":      None,    # str: other party full name
+                "respondent_addr": None,    # str
+            },
+            "amounts":         {},      # dict: deposit, wages, etc.
+            "dates":           {},      # dict: incident_date, vacate_date, etc.
+            "documents_held":  [],      # list: agreement, receipt, etc.
+            "draft_type":      None,    # str: fir | rti | notice | consumer
+            "advice_given":    False,   # bool
+            "questions_asked": [],      # list: track what was already asked
+        },
+
+        # Metadata
+        "created_at":     datetime.now(timezone.utc).isoformat(),
+        "_last_accessed": _now_ts(),
     }
+
+
+# ── Case File Helpers ─────────────────────────────────────────────────────────
+
+def merge_case_file(existing: dict, updates: dict) -> dict:
+    """Merge AI-returned updates into existing case file.
+    Never overwrites a non-None value with None.
+    Dicts are merged recursively. Lists are replaced.
+    """
+    for key, val in updates.items():
+        if val is None:
+            continue   # AI returning null = "I don't know" — keep existing
+        if isinstance(val, dict) and isinstance(existing.get(key), dict):
+            merge_case_file(existing[key], val)
+        else:
+            existing[key] = val
+    return existing
+
+
+def get_case_file(session_id: str) -> dict:
+    """Return the case_file from the session."""
+    return get_session(session_id)["case_file"]
+
+
+def update_case_file(session_id: str, updates: dict) -> None:
+    """Merge updates into the session case_file."""
+    session = get_session(session_id)
+    case_file = session["case_file"]
+    merge_case_file(case_file, updates)
+    _touch(session)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

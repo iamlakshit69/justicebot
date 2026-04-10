@@ -5,7 +5,7 @@ import logging
 from groq import Groq
 
 from config import GROQ_API_KEY, MODELS, TEMPERATURE
-from prompts.draft_prompts import DRAFT_PROMPTS, DRAFT_INSTRUCTION
+from prompts.draft_prompts import DRAFT_SYSTEM_PROMPT, build_draft_user_message
 
 
 logger = logging.getLogger(__name__)
@@ -28,21 +28,17 @@ def _get_client() -> Groq:
 
 # ── Drafter ───────────────────────────────────────────────────────────────────
 
-def run_drafter(draft_type: str, context: dict) -> str:
+def run_drafter(draft_type: str, case_file: dict) -> str:
     """
-    Take a draft type and session context, run the 70B drafter model,
-    and return a formatted legal document as a plain string.
+    Take a draft type and session case_file, run the 70B drafter model,
+    and return a fully filled legal document as a plain string.
 
     draft_type must be one of: fir, rti, consumer, notice
-    context must contain:
-        user_query, domain, key_facts, rights_summary, next_steps
+    case_file must be the full structured case_file from the session.
 
     Never raises — returns a human-readable error string on failure
     so the frontend can display it gracefully instead of crashing.
     """
-
-    # FIX: Corrected docstring — previously said "Gemma drafter model"
-    # but config has always used llama-3.3-70b-versatile.
 
     # Sanitise draft_type — fall back to "notice" for unknown values
     draft_type = (draft_type or "").strip().lower()
@@ -50,30 +46,9 @@ def run_drafter(draft_type: str, context: dict) -> str:
         logger.warning(f"Drafter received unknown draft_type '{draft_type}' — defaulting to 'notice'.")
         draft_type = "notice"
 
-    draft_prompt  = DRAFT_PROMPTS[draft_type]
-    system_prompt = DRAFT_INSTRUCTION.strip() + "\n\n" + draft_prompt.strip()
-
-    # Build context string from session data
-    key_facts  = context.get("key_facts", [])
-    next_steps = context.get("next_steps", [])
-
-    facts_text      = "\n".join(f"- {f}" for f in key_facts)  if key_facts  else "- Not available."
-    next_steps_text = "\n".join(f"- {s}" for s in next_steps) if next_steps else "- Not available."
-
-    user_query     = str(context.get("user_query",     "")).strip()
-    domain         = str(context.get("domain",         "")).strip().upper()
-    rights_summary = str(context.get("rights_summary", "")).strip() or "Not available."
-
-    user_message = (
-        f"Please draft a {draft_type.upper()} document based on the following case details:\n\n"
-        f"Original Query: {user_query}\n\n"
-        f"Legal Domain: {domain}\n\n"
-        f"Key Facts:\n{facts_text}\n\n"
-        f"Legal Rights Summary:\n{rights_summary}\n\n"
-        f"Recommended Next Steps:\n{next_steps_text}\n\n"
-        "Draft the complete document now. Use placeholder brackets like [NAME], [ADDRESS], "
-        "[DATE], [POLICE STATION] etc. wherever specific details are needed from the citizen."
-    )
+    # v2: Use the case-file-driven prompt system
+    system_prompt = DRAFT_SYSTEM_PROMPT.strip()
+    user_message = build_draft_user_message(draft_type, case_file)
 
     messages = [
         {"role": "system", "content": system_prompt},

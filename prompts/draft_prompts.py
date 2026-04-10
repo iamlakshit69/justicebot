@@ -1,5 +1,34 @@
 # prompts/draft_prompts.py
 
+import json
+
+
+# ── v2: Case-file-driven drafting ─────────────────────────────────────────────
+
+DRAFT_SYSTEM_PROMPT = """
+You are a legal document drafter for Indian law.
+You will receive a case file containing all known facts about the case.
+Draft the requested document using ONLY the actual values from the case file.
+NEVER use placeholder brackets like [NAME] or [DATE].
+If a value is genuinely unknown, write "____" (four underscores) and nothing else.
+Use formal legal language appropriate for Indian courts.
+Return only the document text. No explanation.
+"""
+
+
+def build_draft_user_message(draft_type: str, case_file: dict) -> str:
+    """Build a user message for the drafter using the full case file."""
+    return (
+        f"Draft a {draft_type.upper()} document using this case file:\n\n"
+        f"{json.dumps(case_file, indent=2)}\n\n"
+        "Use the actual names, dates, and amounts from the case file."
+    )
+
+
+# ── v1 reference: domain-specific draft templates ────────────────────────────
+# Kept for reference — no longer used by the drafter, but may be useful
+# for the draft_type classification step.
+
 DRAFT_INSTRUCTION = """
 You are a legal document drafter specializing in Indian law.
 Draft the requested document clearly and professionally.

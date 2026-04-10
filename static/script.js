@@ -1,6 +1,6 @@
 // static/script.js
-// JusticeBot — Apple Dark Glass UI
-// Rewritten: domain panel killed · action chips · flat bot text · arc meter
+// JusticeBot v2 — Apple Dark Glass UI
+// v2: Phase-based conversation · dynamic action chips · text strength badge
 
 'use strict';
 
@@ -348,119 +348,176 @@ function handleInputKeydown(event) {
 }
 
 // ─────────────────────────────────────────────
-// RENDER ANALYSIS RESULT
+// RENDER ANALYSIS RESULT — v2 phase-based
 // ─────────────────────────────────────────────
 
 function renderAnalysisResult(data) {
+    // Always render the message as flat bot text
+    appendBotMessage(data.message);
+
+    // Phase-specific rendering
+    if (data.phase === 'GATHERING') {
+        // No cards. Just the message. Maybe chips.
+        renderActionChips(data);
+        return;
+    }
+
+    if (data.phase === 'ADVISING') {
+        const chatArea = document.getElementById('chatArea');
+
+        // Render legal sections (if any)
+        if (data.legal_sections && data.legal_sections.length > 0) {
+            renderLegalSections(data.legal_sections);
+        }
+
+        // Render case strength badge (if any)
+        if (data.case_strength) {
+            renderStrengthBadge(data.case_strength);
+        }
+
+        // Render escalation notice if needed
+        if (data.needs_professional) {
+            renderEscalationNotice();
+        }
+
+        renderActionChips(data);
+        return;
+    }
+
+    if (data.phase === 'DRAFTING') {
+        // If draft_ready, auto-trigger draft fetch
+        if (data.draft_ready) {
+            triggerDraftFetch(data.draft_type);
+        }
+        // Otherwise just the message (asking for missing fields)
+        renderActionChips(data);
+        return;
+    }
+
+    // Fallback: just render chips
+    renderActionChips(data);
+}
+
+// ─────────────────────────────────────────────
+// RENDER LEGAL SECTIONS
+// ─────────────────────────────────────────────
+
+function renderLegalSections(sections) {
     const chatArea = document.getElementById('chatArea');
-
-    // ── 1 · Rights summary — flat bot text ──
-    const rightsRow = document.createElement('div');
-    rightsRow.className = 'message-row bot-row';
-    rightsRow.innerHTML = `
-        <div>
-            <div class="bot-text"><p>${escapeHTML(data.rights_summary)}</p></div>
-            <div class="msg-meta">${now()}</div>
-        </div>`;
-    chatArea.appendChild(rightsRow);
-
-    // ── 2 · Grouped result cards ──
     const group = document.createElement('div');
     group.className = 'message-row bot-row';
     group.style.flexDirection = 'column';
     group.style.alignItems = 'flex-start';
-    group.style.gap = '0';
 
-    let html = '';
+    const sectionsHTML = sections.map(s => `
+        <li class="section-item"
+            onclick="explainSection(this)"
+            data-section="${escapeAttr(s)}">
+            <span>${escapeHTML(s)}</span>
+            <span class="section-item-hint">
+                <i data-lucide="info" style="width:13px;height:13px"></i>
+            </span>
+        </li>`).join('');
 
-    // Legal sections
-    if (data.legal_sections && data.legal_sections.length > 0) {
-        const sectionsHTML = data.legal_sections.map(s => `
-            <li class="section-item"
-                onclick="explainSection(this)"
-                data-section="${escapeAttr(s)}">
-                <span>${escapeHTML(s)}</span>
-                <span class="section-item-hint">
-                    <i data-lucide="info" style="width:13px;height:13px"></i>
-                </span>
-            </li>`).join('');
-
-        html += `
+    group.innerHTML = `
+        <div style="padding:2px 24px;width:100%">
             <p class="result-label">Applicable Law</p>
             <div class="card-group">
                 <ul class="sections-list">${sectionsHTML}</ul>
-            </div>`;
-    }
-
-    // Case strength arc
-    const strength = Math.max(0, Math.min(100, data.case_strength || 0));
-    const arcCircumf = 220;
-    const arcOffset = arcCircumf - (arcCircumf * strength / 100);
-    const verdict = strength >= 70 ? 'Strong case' : strength >= 40 ? 'Moderate case' : 'Needs support';
-    const arcColor = strength >= 70
-        ? 'rgba(80,200,140,0.55)'
-        : strength >= 40
-            ? 'rgba(255,185,80,0.45)'
-            : 'rgba(255,100,100,0.45)';
-
-    html += `
-        <p class="result-label" style="margin-top:14px">Case Strength</p>
-        <div class="result-card">
-            <div class="strength-arc-wrap">
-                <div class="strength-arc">
-                    <svg viewBox="0 0 80 80">
-                        <circle class="arc-bg"   cx="40" cy="40" r="35"/>
-                        <circle class="arc-fill" cx="40" cy="40" r="35"
-                            data-offset="${arcOffset}"
-                            data-color="${arcColor}"
-                            style="stroke-dashoffset:${arcCircumf}"/>
-                    </svg>
-                    <div class="arc-label">${strength}</div>
-                </div>
-                <div class="strength-meta">
-                    <div class="strength-verdict">${verdict}</div>
-                    <div class="strength-sub">${data.confidence || 0}% classification confidence</div>
-                </div>
             </div>
         </div>`;
 
-    // Next steps
-    if (data.next_steps && data.next_steps.length > 0) {
-        const stepsHTML = data.next_steps.map(s =>
-            `<li class="step-item">${escapeHTML(s)}</li>`
-        ).join('');
-
-        html += `
-            <p class="result-label" style="margin-top:14px">Next Steps</p>
-            <div class="result-card">
-                <ol class="steps-list">${stepsHTML}</ol>
-            </div>`;
-    }
-
-    group.innerHTML = `<div style="padding:2px 24px;width:100%">${html}</div>`;
     chatArea.appendChild(group);
     icons();
-
-    // Animate arc after paint
-    requestAnimationFrame(() => {
-        setTimeout(() => {
-            const arc = chatArea.querySelector('.arc-fill[data-offset]');
-            if (!arc) return;
-            const target = arc.getAttribute('data-offset');
-            const color = arc.getAttribute('data-color');
-            arc.style.strokeDashoffset = target;
-            arc.style.stroke = color;
-        }, 120);
-    });
-
-    // ── 3 · Action chips ──
-    renderActionChips(data);
-
-    scrollToBottom();
 }
 
 // ─────────────────────────────────────────────
-// ACTION CHIPS
+// RENDER STRENGTH BADGE — v2 text pill
+// ─────────────────────────────────────────────
+
+function renderStrengthBadge(strength) {
+    // strength: "Strong" | "Moderate" | "Needs support"
+    const chatArea = document.getElementById('chatArea');
+
+    const colors = {
+        'Strong':        'var(--safe)',
+        'Moderate':      'var(--warn)',
+        'Needs support': 'var(--danger)'
+    };
+
+    const icons_map = {
+        'Strong':        'shield-check',
+        'Moderate':      'shield',
+        'Needs support': 'shield-alert'
+    };
+
+    const color = colors[strength] || 'var(--text-secondary)';
+    const icon = icons_map[strength] || 'shield';
+
+    const row = document.createElement('div');
+    row.className = 'message-row bot-row';
+    row.innerHTML = `
+        <div style="padding:2px 24px;width:100%">
+            <p class="result-label" style="margin-top:8px">Case Strength</p>
+            <div class="strength-badge" style="
+                display:inline-flex;
+                align-items:center;
+                gap:6px;
+                padding:6px 14px;
+                border-radius:20px;
+                background:color-mix(in srgb, ${color} 15%, transparent);
+                border:1px solid color-mix(in srgb, ${color} 30%, transparent);
+                color:${color};
+                font-size:13px;
+                font-weight:500;
+            ">
+                <i data-lucide="${icon}" style="width:14px;height:14px"></i>
+                ${escapeHTML(strength)}
+            </div>
+        </div>`;
+
+    chatArea.appendChild(row);
+    icons();
+}
+
+// ─────────────────────────────────────────────
+// RENDER ESCALATION NOTICE
+// ─────────────────────────────────────────────
+
+function renderEscalationNotice() {
+    const chatArea = document.getElementById('chatArea');
+
+    const row = document.createElement('div');
+    row.className = 'message-row bot-row';
+    row.innerHTML = `
+        <div style="padding:2px 24px;width:100%">
+            <div class="escalation-notice" style="
+                display:flex;
+                align-items:flex-start;
+                gap:10px;
+                padding:12px 16px;
+                border-radius:12px;
+                background:color-mix(in srgb, var(--warn) 8%, transparent);
+                border:1px solid color-mix(in srgb, var(--warn) 20%, transparent);
+                font-size:13px;
+                line-height:1.5;
+                color:var(--text-secondary);
+                margin-top:4px;
+            ">
+                <i data-lucide="alert-triangle" style="width:16px;height:16px;color:var(--warn);flex-shrink:0;margin-top:2px"></i>
+                <span>
+                    This situation is complex enough that a professional lawyer can make a real difference.
+                    Free legal aid: <strong style="color:var(--text-primary)">NALSA 15100</strong> (toll-free)
+                </span>
+            </div>
+        </div>`;
+
+    chatArea.appendChild(row);
+    icons();
+}
+
+// ─────────────────────────────────────────────
+// ACTION CHIPS — v2 dynamic from API
 // ─────────────────────────────────────────────
 
 function renderActionChips(data) {
@@ -470,27 +527,48 @@ function renderActionChips(data) {
     const old = chatArea.querySelector('.action-chips');
     if (old) old.remove();
 
-    const chips = [];
-    const domain = (data.domain || '').toLowerCase();
+    const chips = data.action_chips || [];
 
-    // Draft chip — contextual based on domain
-    if (domain === 'criminal') {
-        chips.push({ label: 'Draft FIR', icon: 'file-pen', action: () => requestDraft('fir') });
-    } else if (domain === 'rti') {
-        chips.push({ label: 'Draft RTI Application', icon: 'file-pen', action: () => requestDraft('rti') });
-    } else if (domain === 'consumer') {
-        chips.push({ label: 'Draft Complaint', icon: 'file-pen', action: () => requestDraft('consumer') });
-    } else {
-        chips.push({ label: 'Draft Legal Notice', icon: 'file-pen', action: () => requestDraft('notice') });
+    // Map chip label to action
+    const chipActions = {
+        'Draft a Legal Notice':     () => requestDraft('notice'),
+        'Draft an RTI':             () => requestDraft('rti'),
+        'Draft FIR Complaint':      () => requestDraft('fir'),
+        'Draft Consumer Complaint': () => requestDraft('consumer'),
+        'Find Legal Help Nearby':   () => openLegalAidFinder(),
+        'Analyse a Document':       () => document.getElementById('docUpload').click(),
+        'I have documents':         () => document.getElementById('docUpload').click(),
+    };
+
+    // Map chip labels to icons
+    const chipIcons = {
+        'Draft a Legal Notice':     'file-pen',
+        'Draft an RTI':             'file-pen',
+        'Draft FIR Complaint':      'file-pen',
+        'Draft Consumer Complaint': 'file-pen',
+        'Find Legal Help Nearby':   'map-pin',
+        'Analyse a Document':       'paperclip',
+        'I have documents':         'paperclip',
+    };
+
+    // Render only chips that have a known action
+    const validChips = chips.filter(c => chipActions[c]);
+
+    // Fallback: if no valid chips from the API, show basic helpers
+    if (validChips.length === 0 && chips.length === 0) {
+        validChips.push('Find Legal Help Nearby');
+        validChips.push('Analyse a Document');
     }
 
-    chips.push({ label: 'Find Legal Help Nearby', icon: 'map-pin', action: () => openLegalAidFinder() });
-    chips.push({ label: 'Analyse a Document', icon: 'paperclip', action: () => document.getElementById('docUpload').click() });
+    const finalChips = validChips.filter(c => chipActions[c]);
+    if (finalChips.length === 0) return;
 
     const row = document.createElement('div');
     row.className = 'action-chips';
 
-    chips.forEach(({ label, icon, action }) => {
+    finalChips.forEach(label => {
+        const icon = chipIcons[label] || 'zap';
+        const action = chipActions[label];
         const btn = document.createElement('button');
         btn.className = 'chip';
         btn.innerHTML = `<i data-lucide="${icon}" style="width:13px;height:13px"></i>${escapeHTML(label)}`;
@@ -504,6 +582,43 @@ function renderActionChips(data) {
     chatArea.appendChild(row);
     icons();
     scrollToBottom();
+}
+
+// ─────────────────────────────────────────────
+// TRIGGER DRAFT FETCH — v2 auto-draft
+// ─────────────────────────────────────────────
+
+async function triggerDraftFetch(draftType) {
+    if (!draftType) return;
+    if (isLoading) return;
+
+    setLoading(true);
+    const thinkingId = appendThinking();
+
+    try {
+        const response = await fetch('/api/draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ draft_type: draftType, session_id: sessionId })
+        });
+
+        const data = await response.json();
+        removeThinking(thinkingId);
+
+        if (!response.ok || data.error) {
+            appendBotMessage(data.error || 'Failed to generate draft.');
+            return;
+        }
+
+        lastDraftText = data.draft;
+        showModal(`Draft ${draftType.toUpperCase()} Document`, data.draft);
+
+    } catch (_) {
+        removeThinking(thinkingId);
+        appendBotMessage('Failed to generate draft. Please try again.');
+    } finally {
+        setLoading(false);
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -644,10 +759,6 @@ function toggleClause(card) {
 // ─────────────────────────────────────────────
 
 async function requestDraft(draftType) {
-    if (!lastAnalysisResult) {
-        appendBotMessage('Please describe your legal problem first before requesting a draft document.');
-        return;
-    }
     if (isLoading) return;
 
     setLoading(true);
