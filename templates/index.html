@@ -8,6 +8,18 @@
     <meta name="description"
         content="JusticeBot provides free AI-powered legal guidance for Indian citizens. Know your rights, get case analysis, and draft legal documents — all in plain language.">
 
+    <!-- PWA -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JusticeBot">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:wght@400;500;600&display=swap" rel="stylesheet">
+
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 
@@ -81,6 +93,12 @@
         <i data-lucide="menu" style="width:18px;height:18px"></i>
     </button>
 
+    <!-- ── LANGUAGE TOGGLE ───────────────────────────────────────────────── -->
+    <button class="lang-toggle-btn" id="langToggleBtn"
+            onclick="toggleLanguage()"
+            title="Switch between English and Hindi"
+            aria-label="Toggle language">हिं</button>
+
     <!-- ── MAIN ──────────────────────────────────────────────────────────── -->
     <main class="main">
 
@@ -95,20 +113,57 @@
             </button>
         </div>
 
+        <!-- ── PHASE INDICATOR ─────────────────────────────────────────────── -->
+        <div class="phase-indicator" id="phaseIndicator">
+            <div class="phase-step">
+                <span class="phase-dot active current" id="phase-dot-0"></span>
+                <span class="phase-label active" id="phase-label-0">Gathering Info</span>
+            </div>
+            <div class="phase-connector"></div>
+            <div class="phase-step">
+                <span class="phase-dot" id="phase-dot-1"></span>
+                <span class="phase-label" id="phase-label-1">Analysis</span>
+            </div>
+            <div class="phase-connector"></div>
+            <div class="phase-step">
+                <span class="phase-dot" id="phase-dot-2"></span>
+                <span class="phase-label" id="phase-label-2">Drafting</span>
+            </div>
+        </div>
+
         <!-- ── EMPTY STATE ────────────────────────────────────────────────── -->
         <div class="empty-state" id="emptyState">
             <div class="empty-logo">
                 <i data-lucide="scale" style="width:22px;height:22px"></i>
             </div>
             <p class="empty-title">JusticeBot</p>
-            <p class="empty-sub">Describe your legal problem in plain language — I'll explain your rights, cite the law,
-                and offer to draft documents if needed.</p>
+            <p class="empty-sub">Tell me what happened — in plain language, in as much detail as you can. I'll analyze
+                your situation, cite the exact laws that protect you, and help you take action.</p>
         </div>
 
-        <!-- ── CHAT AREA ──────────────────────────────────────────────────── -->
-        <div class="chat-area" id="chatArea">
-            <!-- Messages injected by JS -->
+        <!-- ── CHAT AREA + CASE FILE SIDEBAR ──────────────────────────────── -->
+        <div class="chat-layout">
+            <div class="chat-area" id="chatArea">
+                <!-- Messages injected by JS -->
+            </div>
+
+            <!-- Case File Sidebar -->
+            <aside class="case-file-sidebar" id="caseFileSidebar">
+                <div class="cf-header">
+                    <i data-lucide="folder-open" style="width:14px;height:14px"></i>
+                    <span>Your Case File</span>
+                </div>
+                <div class="cf-content" id="caseFileContent">
+                    <p class="cf-empty">Start describing your problem to build your case file.</p>
+                </div>
+            </aside>
         </div>
+
+        <!-- Scroll-to-bottom button -->
+        <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="scrollToBottom()"
+                aria-label="Scroll to bottom" style="display:none">
+            <i data-lucide="chevrons-down" style="width:16px;height:16px"></i>
+        </button>
 
         <!-- ── BOTTOM CONTROLS ────────────────────────────────────────────── -->
         <div class="bottom-controls">
@@ -159,8 +214,18 @@
                 <i data-lucide="x" style="width:16px;height:16px"></i>
             </button>
         </div>
+
+        <!-- Read view -->
         <div class="modal-body" id="modalBody"></div>
+        <!-- Edit view (hidden by default) -->
+        <textarea class="modal-edit-area" id="modalEditArea" style="display:none"
+                  aria-label="Edit draft document" spellcheck="true"></textarea>
+
         <div class="modal-footer">
+            <button class="edit-btn" id="editDraftBtn" onclick="toggleDraftEdit()">
+                <i data-lucide="pencil" style="width:14px;height:14px"></i>
+                Edit
+            </button>
             <button class="copy-btn" id="copyDraftBtn" onclick="copyDraftToClipboard()">
                 <i data-lucide="copy" style="width:14px;height:14px"></i>
                 Copy text
@@ -322,6 +387,7 @@
     <script>
         lucide.createIcons();
     </script>
+
 
 </body>
 

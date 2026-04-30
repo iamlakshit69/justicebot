@@ -2,9 +2,8 @@
 
 import logging
 
-from groq import Groq
-
-from config import GROQ_API_KEY, MODELS, TEMPERATURE
+from config import MODELS, TEMPERATURE, MAX_TOKENS
+from utils.llm import chat_completion
 from prompts.draft_prompts import DRAFT_SYSTEM_PROMPT, build_draft_user_message
 
 
@@ -15,15 +14,6 @@ logger = logging.getLogger(__name__)
 # remains safe even if called directly outside of the Flask route.
 
 VALID_DRAFT_TYPES = {"fir", "rti", "consumer", "notice"}
-
-
-# ── Client ────────────────────────────────────────────────────────────────────
-# FIX: Moved out of module scope.
-# Module-level Groq() crashed the whole app on import if GROQ_API_KEY
-# was missing or blank.
-
-def _get_client() -> Groq:
-    return Groq(api_key=GROQ_API_KEY)
 
 
 # ── Drafter ───────────────────────────────────────────────────────────────────
@@ -56,11 +46,11 @@ def run_drafter(draft_type: str, case_file: dict) -> str:
     ]
 
     try:
-        client   = _get_client()
-        response = client.chat.completions.create(
+        response = chat_completion(
             model=MODELS["drafter"],
             temperature=TEMPERATURE["drafter"],
             messages=messages,
+            max_tokens=MAX_TOKENS["drafter"],
         )
 
         draft_text = response.choices[0].message.content.strip()

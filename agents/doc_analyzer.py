@@ -3,9 +3,9 @@
 import json
 import logging
 
-from groq import Groq
-
-from config import GROQ_API_KEY, MODELS, TEMPERATURE
+from config import MODELS, TEMPERATURE, MAX_TOKENS
+from utils.json_helpers import extract_json
+from utils.llm import chat_completion
 
 
 logger = logging.getLogger(__name__)
@@ -53,15 +53,6 @@ Return only valid JSON. No explanation outside the JSON object.
 """
 
 
-# ── Client ────────────────────────────────────────────────────────────────────
-# FIX: Moved out of module scope.
-# Module-level Groq() crashed the whole app on import if GROQ_API_KEY
-# was missing or blank.
-
-def _get_client() -> Groq:
-    return Groq(api_key=GROQ_API_KEY)
-
-
 # ── Analyzer ──────────────────────────────────────────────────────────────────
 
 def run_doc_analyzer(document_text: str) -> dict:
@@ -102,22 +93,18 @@ def run_doc_analyzer(document_text: str) -> dict:
     ]
 
     try:
-        client   = _get_client()
-        response = client.chat.completions.create(
+        response = chat_completion(
             model=MODELS["analyzer"],
             temperature=TEMPERATURE["analyzer"],
             messages=messages,
+            max_tokens=MAX_TOKENS["analyzer"],
         )
 
         raw = response.choices[0].message.content.strip()
 
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
-
-        result = json.loads(raw)
+        # Use the shared robust JSON extraction (previously had a fragile
+        # split-based code-fence stripper that failed on extra whitespace)
+        result = extract_json(raw)
 
         # FIX: Replaced bare assert with explicit key validation.
         missing_keys = {"document_summary", "clauses"} - result.keys()
@@ -170,7 +157,7 @@ def run_doc_analyzer(document_text: str) -> dict:
         }
 
     except json.JSONDecodeError as e:
-        logger.error(f"Analyzer JSON parse error: {e}  raw={raw!r:.200}")
+        logger.error(f"Analyzer JSON parse error: {e}")
         return _fallback(reason=f"JSON parse error: {e}")
 
     except ValueError as e:

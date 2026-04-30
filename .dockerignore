@@ -1,10 +1,12 @@
-.env
+venv/
 __pycache__/
 *.pyc
 *.pyo
-venv/
-*.pdf
+.env
+.git/
 .DS_Store
 **/.DS_Store
 .pytest_cache/
 diagnostics/
+tests/
+*.pdf

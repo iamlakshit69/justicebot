@@ -6,98 +6,91 @@ import json
 # ── v2: Case-file-driven drafting ─────────────────────────────────────────────
 
 DRAFT_SYSTEM_PROMPT = """
-You are a legal document drafter for Indian law.
-You will receive a case file containing all known facts about the case.
-Draft the requested document using ONLY the actual values from the case file.
-NEVER use placeholder brackets like [NAME] or [DATE].
-If a value is genuinely unknown, write "____" (four underscores) and nothing else.
-Use formal legal language appropriate for Indian courts.
-Return only the document text. No explanation.
+You are a senior legal document drafter with 20 years of experience in Indian courts.
+You draft documents that lawyers would be proud of and judges take seriously.
+
+PRINCIPLES:
+- You draft REAL legal documents, not templates. Every document looks like it was
+  prepared by a practising advocate.
+- Use formal legal English throughout. Numbered paragraphs. Proper legal phrasing.
+- Use the ACTUAL names, dates, amounts, and addresses from the case file.
+- If a value is genuinely unknown, write "____" (four underscores) and nothing else.
+  Never use placeholder brackets like [NAME] or [DATE].
+- Bold the demand amount and key deadlines.
+
+FORMAT RULES (follow these exactly):
+- Start with "LEGAL NOTICE" or the document type as a centered heading
+- Include "Via Registered Post / Speed Post" for notices
+- Use proper date format: "10th April, 2026"
+- Use numbered paragraphs (1., 2., 3., ...) for the body
+- End with a proper closing: "Under the instructions from and on behalf of my client..."
+- Include a signature block with name and address
+
+Return only the document text. No explanation. No markdown fences.
 """
 
 
 def build_draft_user_message(draft_type: str, case_file: dict) -> str:
     """Build a user message for the drafter using the full case file."""
+
+    type_instructions = {
+        "notice": (
+            "Draft a LEGAL NOTICE to be sent via Registered Post.\n"
+            "Structure:\n"
+            "- Header: LEGAL NOTICE (centered)\n"
+            "- Sub-header: Via Registered Post / Speed Post\n"
+            "- Date line\n"
+            "- From: Sender's full name and address\n"
+            "- To: Recipient's full name and address\n"
+            "- Subject: Legal Notice under [relevant Act]\n"
+            "- Opening: 'Under the instructions from and on behalf of my client...'\n"
+            "- Body: Numbered paragraphs with full facts, specific legal sections cited,\n"
+            "  and the specific demand (with bold amount)\n"
+            "- Deadline: 15 or 30 days to comply\n"
+            "- Consequences: 'Failure to comply... civil and criminal proceedings'\n"
+            "- Closing: 'This notice is sent without prejudice to any rights...'\n"
+            "- Signature block\n"
+        ),
+        "fir": (
+            "Draft an FIR COMPLAINT LETTER to be submitted at a Police Station.\n"
+            "Structure:\n"
+            "- To: The Station House Officer (SHO), [Police Station]\n"
+            "- Subject: Complaint under [IPC/BNS sections]\n"
+            "- Body: Full incident with date, time, location, accused details\n"
+            "- Relevant sections of IPC/BNS with brief description\n"
+            "- Prayer: Request for FIR registration and investigation\n"
+            "- Signature block with phone number\n"
+        ),
+        "rti": (
+            "Draft an RTI APPLICATION under the Right to Information Act, 2005.\n"
+            "Structure:\n"
+            "- To: The Public Information Officer (PIO), [Department]\n"
+            "- Subject: Application under Section 6(1) of RTI Act, 2005\n"
+            "- Body: Numbered list of specific information sought\n"
+            "- Fee: Rs. 10 enclosed via IPO/DD/Court Fee Stamp\n"
+            "- Declaration under Section 6(2)\n"
+            "- Signature block\n"
+        ),
+        "consumer": (
+            "Draft a CONSUMER COMPLAINT under Consumer Protection Act, 2019.\n"
+            "Structure:\n"
+            "- Before: District Consumer Disputes Redressal Commission\n"
+            "- Case title format\n"
+            "- Parties: Complainant and Opposite Party with full details\n"
+            "- Jurisdiction statement\n"
+            "- Numbered facts (at least 5-8 detailed paragraphs)\n"
+            "- Deficiency in service / unfair trade practice\n"
+            "- Relief sought with specific amounts\n"
+            "- List of annexed documents\n"
+            "- Verification and signature\n"
+        ),
+    }
+
+    specific = type_instructions.get(draft_type, type_instructions["notice"])
+
     return (
-        f"Draft a {draft_type.upper()} document using this case file:\n\n"
-        f"{json.dumps(case_file, indent=2)}\n\n"
-        "Use the actual names, dates, and amounts from the case file."
+        f"{specific}\n\n"
+        f"CASE FILE:\n{json.dumps(case_file, indent=2)}\n\n"
+        "Use the actual names, dates, and amounts from the case file.\n"
+        "Make this document look like it was drafted by a senior advocate."
     )
-
-
-# ── v1 reference: domain-specific draft templates ────────────────────────────
-# Kept for reference — no longer used by the drafter, but may be useful
-# for the draft_type classification step.
-
-DRAFT_INSTRUCTION = """
-You are a legal document drafter specializing in Indian law.
-Draft the requested document clearly and professionally.
-Use formal legal language appropriate for Indian courts and government offices.
-Fill in all relevant details based on the context provided.
-Return only the formatted document text. No explanation or commentary.
-"""
-
-DRAFT_PROMPTS = {
-    "fir": """
-Draft a First Information Report (FIR) complaint letter to be submitted to a Police Station in India.
-The document must include:
-- To: The Station House Officer (SHO), [Police Station Name]
-- Subject line
-- Full incident description with date, time, location
-- Names of accused (if known)
-- Witnesses (if any)
-- Relevant IPC / BNS sections applicable
-- Prayer / request for action
-- Complainant signature block
-
-Use formal language. Format it as a proper complaint letter ready to submit.
-""",
-
-    "rti": """
-Draft a Right to Information (RTI) Application under the RTI Act 2005 to be submitted to a Public Authority in India.
-The document must include:
-- To: The Public Information Officer (PIO), [Department/Ministry Name]
-- Subject: Application under Section 6(1) of the RTI Act 2005
-- Applicant details block
-- Clearly numbered list of specific information being sought
-- Statement that the matter does not concern the life or liberty of any person
-- Application fee note (Rs. 10 by IPO / DD / Court Fee Stamp)
-- Declaration and signature block
-
-Use formal language. Format it ready for submission.
-""",
-
-    "consumer": """
-Draft a Consumer Complaint to be filed before the District Consumer Disputes Redressal Commission 
-under the Consumer Protection Act 2019.
-The document must include:
-- Case title: [Complainant Name] vs [Opposite Party / Company Name]
-- Complainant details
-- Opposite Party details
-- Jurisdiction statement
-- Numbered facts of the complaint
-- Deficiency in service / unfair trade practice description
-- Relief sought (refund, compensation, replacement)
-- List of documents attached
-- Verification and signature block
-
-Use formal legal language suitable for a consumer court filing.
-""",
-
-    "notice": """
-Draft a Legal Notice to be sent via registered post to the opposing party.
-The document must include:
-- From: [Sender's Name and Address]
-- To: [Recipient's Name and Address]
-- Subject: Legal Notice
-- Opening: "TAKE NOTICE THAT..."
-- Clear statement of facts and grievance
-- Specific demand or action required
-- Time period given to comply (typically 15 or 30 days)
-- Consequences of non-compliance
-- Closing statement reserving legal rights
-- Sender's signature block
-
-Use firm, formal legal language appropriate for a notice sent before litigation.
-"""
-}

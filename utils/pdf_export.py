@@ -2,7 +2,7 @@
 
 import logging
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fpdf import FPDF
@@ -34,10 +34,10 @@ _DEJAVU_VARIANTS = {
 }
 
 _DEJAVU_URLS = {
-    "DejaVuSans.ttf":            "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans.ttf",
-    "DejaVuSans-Bold.ttf":       "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-Bold.ttf",
-    "DejaVuSans-Oblique.ttf":    "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-Oblique.ttf",
-    "DejaVuSans-BoldOblique.ttf":"https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-BoldOblique.ttf",
+    "DejaVuSans.ttf":            "https://raw.githubusercontent.com/py-pdf/fpdf2/master/test/fonts/DejaVuSans.ttf",
+    "DejaVuSans-Bold.ttf":       "https://raw.githubusercontent.com/py-pdf/fpdf2/master/test/fonts/DejaVuSans-Bold.ttf",
+    "DejaVuSans-Oblique.ttf":    "https://raw.githubusercontent.com/py-pdf/fpdf2/master/test/fonts/DejaVuSans-Oblique.ttf",
+    "DejaVuSans-BoldOblique.ttf":"https://raw.githubusercontent.com/py-pdf/fpdf2/master/test/fonts/DejaVuSans-BoldOblique.ttf",
 }
 
 # System font directories searched in order (Linux / macOS / Windows)
@@ -162,141 +162,253 @@ class JusticeBotPDF(FPDF):
 
     # ── Header / Footer ───────────────────────────────────────────────────────
 
+    # ── Header / Footer ───────────────────────────────────────────────────────
+
     def header(self):
-        self._set("B", 18)
-        self.set_text_color(30, 30, 30)
-        self.cell(0, 12, "JusticeBot", align="C", new_x="LMARGIN", new_y="NEXT")
+        # We don't want the default header on the very first "Cover" page.
+        if self.page_no() == 1:
+            return
+
+        self._set("B", 14)
+        self.set_text_color(40, 40, 40)
+        self.cell(0, 10, "JusticeBot Legal Analysis", align="L", new_x="RIGHT", new_y="TOP")
+        
+        # Right aligned Domain
+        self.set_x(10)
         self._set("I", 10)
-        self.set_text_color(120, 120, 120)
-        self.cell(0, 6, "Free legal guidance for every citizen", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.ln(3)
-        self.set_draw_color(220, 220, 220)
+        self.set_text_color(100, 100, 100)
+        self.cell(0, 10, "PRELIMINARY ASSESSMENT", align="R", new_x="LMARGIN", new_y="NEXT")
+        
+        self.set_draw_color(200, 200, 200)
+        self.set_line_width(0.5)
         self.line(10, self.get_y(), 200, self.get_y())
-        self.ln(5)
+        self.ln(6)
 
     def footer(self):
         self.set_y(-20)
-        self.set_draw_color(220, 220, 220)
+        self.set_draw_color(200, 200, 200)
+        self.set_line_width(0.5)
         self.line(10, self.get_y(), 200, self.get_y())
         self.ln(2)
+        
         self._set("I", 8)
+        self.set_text_color(120, 120, 120)
+        
+        # Left side: Timestamp
+        timestamp = f"Generated on {datetime.now(timezone.utc).strftime('%d %B %Y')} (UTC)"
+        self.cell(100, 6, timestamp, align="L", new_x="RIGHT", new_y="TOP")
+        
+        # Right side: Page X of Y
+        self.cell(0, 6, f"Page {self.page_no()} of {{nb}}", align="R", new_x="LMARGIN", new_y="NEXT")
+        
         self.set_text_color(150, 150, 150)
         self.cell(
-            0, 6,
-            f"Generated on {datetime.now().strftime('%d %B %Y')}  |  Page {self.page_no()}",
-            align="C", new_x="LMARGIN", new_y="NEXT",
-        )
-        self.cell(
             0, 5,
-            "Disclaimer: AI-generated guidance only. Not a substitute for professional legal advice.",
+            "Disclaimer: AI-generated guidance. This document does not constitute professional legal advice.",
             align="C",
         )
 
     # ── Layout Helpers ────────────────────────────────────────────────────────
 
-    def section_title(self, title: str):
-        self.ln(4)
+    def cover_page(self, case_file: dict, analysis: dict):
+        self.add_page()
+        self.ln(30)
+        
+        # Title
+        self._set("B", 24)
+        self.set_text_color(30, 30, 30)
+        self.cell(0, 14, "LEGAL CASE BRIEF", align="C", new_x="LMARGIN", new_y="NEXT")
+        
+        self.set_draw_color(0, 51, 102)  # Dark Blue
+        self.set_line_width(1.5)
+        self.line(40, self.get_y(), 170, self.get_y())
+        
+        self.ln(20)
+        
+        # Domain & Stats Box
+        domain = str(analysis.get("domain") or case_file.get("domain") or "General").upper()
+        strength = analysis.get("case_strength_score")
+        strength_text = f"{strength}/10" if strength else "Pending Assessment"
+        
+        self.set_fill_color(245, 247, 250)
+        self.rect(30, self.get_y(), 150, 40, style="F")
+        self.ln(8)
+        
         self._set("B", 12)
-        self.set_text_color(74, 108, 247)
-        self.cell(0, 8, _clean_text(title), new_x="LMARGIN", new_y="NEXT")
-        self.set_draw_color(74, 108, 247)
-        self.line(10, self.get_y(), 80, self.get_y())
+        self.set_text_color(50, 50, 50)
+        self.set_x(40)
+        self.cell(60, 10, "SUBJECT MATTER:")
+        self._set("", 12)
+        self.cell(0, 10, domain, new_x="LMARGIN", new_y="NEXT")
+        
+        self._set("B", 12)
+        self.set_x(40)
+        self.cell(60, 10, "EST. STRENGTH:")
+        self._set("", 12)
+        self.cell(0, 10, strength_text, new_x="LMARGIN", new_y="NEXT")
+        
+        self.ln(25)
+        
+        # "Prepared By" info
+        self._set("I", 10)
+        self.set_text_color(100, 100, 100)
+        self.cell(0, 6, "Prepared dynamically via JusticeBot AI", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 6, "CONFIDENTIAL & PRIVILEGED WORK PRODUCT", align="C", new_x="LMARGIN", new_y="NEXT")
+        
+        self.add_page()
+
+    def section_title(self, title: str):
+        self.ln(6)
+        self._set("B", 14)
+        self.set_text_color(0, 51, 102)  # Dark Blue
+        self.cell(0, 10, _clean_text(title), new_x="LMARGIN", new_y="NEXT")
+        
+        # Thin underline
+        self.set_draw_color(0, 51, 102)
+        self.set_line_width(0.3)
+        self.line(10, self.get_y() - 1, 100, self.get_y() - 1)
         self.ln(4)
+
+    def subsection_title(self, title: str):
+        self.ln(3)
+        self._set("B", 11)
+        self.set_text_color(60, 60, 60)
+        self.cell(0, 8, _clean_text(title), new_x="LMARGIN", new_y="NEXT")
+        self.ln(1)
 
     def body_text(self, text: str):
         self._set("", 10)
-        self.set_text_color(60, 60, 60)
+        self.set_text_color(20, 20, 20)
         self.multi_cell(0, 6, _clean_text(text))
         self.ln(2)
 
     def bullet_item(self, text: str):
         self._set("", 10)
-        self.set_text_color(60, 60, 60)
-        self.multi_cell(0, 6, f"  \u2022 {_clean_text(text)}")   # real bullet char
-
-    def info_box(self, label: str, value: str, color: tuple):
-        self.set_fill_color(*color)
-        self._set("B", 9)
-        self.set_text_color(60, 60, 60)
-        self.cell(40, 8, _clean_text(label), fill=True)
-        self._set("", 9)
-        self.cell(0, 8, _clean_text(value), new_x="LMARGIN", new_y="NEXT")
+        self.set_text_color(20, 20, 20)
+        self.set_x(15)
+        self.multi_cell(0, 6, f"\u2022  {_clean_text(text)}")
+        self.ln(1)
+        
+    def check_item(self, text: str, checked: bool):
+        self._set(size=10)
+        self.set_text_color(20, 20, 20)
+        self.set_x(15)
+        symbol = "[ X ]" if checked else "[   ]"
+        self.multi_cell(0, 6, f"{symbol}  {_clean_text(text)}")
         self.ln(1)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def generate_pdf(analysis: dict, draft: str = None) -> bytes:
+def generate_pdf(analysis: dict, case_file: dict, draft: str = None) -> bytes:
     """
-    Generate a PDF report from the combined analysis dict and optional draft text.
-
-    analysis keys expected:
-        domain, confidence, key_facts,
-        rights_summary, legal_sections, case_strength, next_steps
-
-    Returns raw PDF bytes.
-    Raises TypeError if analysis is not a dict (caller must validate before
-    passing in — see the isinstance() guard added to app.py /api/pdf route).
+    Generate a professional PDF report utilizing both the latest ADVISING analysis
+    and the persisted case_file structures.
     """
     if not isinstance(analysis, dict):
-        raise TypeError(f"generate_pdf() expected dict, got {type(analysis).__name__}")
+        raise TypeError(f"generate_pdf() expected dict for analysis, got {type(analysis).__name__}")
+    if not isinstance(case_file, dict):
+        case_file = {}
 
     pdf = JusticeBotPDF()
-    pdf.add_page()
+    # alias nb gives total page count
+    pdf.set_auto_page_break(auto=True, margin=20) 
+    pdf.alias_nb_pages()
+    
+    # 1. Cover Page
+    pdf.cover_page(case_file, analysis)
+    
+    # 2. Executive Summary / Current Status
+    message = str(analysis.get("message") or "Consultation records attached.")
+    pdf.section_title("Executive Summary")
+    pdf.body_text(message)
 
-    domain     = str(analysis.get("domain", "N/A")).upper()
-    confidence = analysis.get("confidence", 0)
-    key_facts  = analysis.get("key_facts", [])
+    # 3. Case Facts & Parties (from case_file)
+    facts_dict = case_file.get("facts", {})
+    parties    = case_file.get("parties", {})
+    
+    if facts_dict or any(parties.values()):
+        pdf.section_title("Case Particulars")
+        
+        if any(parties.values()):
+            pdf.subsection_title("Parties")
+            if parties.get("claimant"):
+                pdf.bullet_item(f"Claimant: {parties['claimant']}")
+            if parties.get("respondent"):
+                pdf.bullet_item(f"Respondent: {parties['respondent']}")
+            
+        if facts_dict:
+            pdf.subsection_title("Material Facts")
+            for key, val in facts_dict.items():
+                if val:
+                    pdf.bullet_item(f"{key.replace('_', ' ').title()}: {val}")
+    
+    # 4. Legal Context
+    sections = analysis.get("legal_sections", [])
+    if sections:
+        pdf.section_title("Applicable Legal Provisions")
+        for section in sections:
+            pdf.bullet_item(str(section))
+            
+    # 5. Evidentiary Requirements
+    evidence = analysis.get("evidence_checklist", [])
+    if evidence:
+        pdf.section_title("Evidence & Documentation Checklist")
+        for item in evidence:
+            label = str(item.get("item", ""))
+            status = str(item.get("status", "")).lower()
+            pdf.check_item(label, status == "have")
+            
+    # 6. Strategic Analysis (Arguments & Strengths)
+    factors = analysis.get("case_strength_factors", [])
+    opponent_args = analysis.get("opponent_arguments", [])
+    
+    if factors or opponent_args:
+        pdf.section_title("Strategic Assessment")
+        if factors:
+            pdf.subsection_title("Key Factors")
+            for factor in factors:
+                pdf.bullet_item(str(factor))
+                
+        if opponent_args:
+            pdf.subsection_title("Anticipated Defences & Counter-Arguments")
+            for arg_obj in opponent_args:
+                arg_text = str(arg_obj.get("argument", ""))
+                counter_text = str(arg_obj.get("counter", ""))
+                pdf.bullet_item(f"They Will Argue: {arg_text}")
+                pdf.bullet_item(f"Your Counter: {counter_text}\n")
 
-    try:
-        pdf.section_title("Query Classification")
-        pdf.info_box("Domain:", domain, (240, 244, 255))
-        pdf.info_box("Confidence:", f"{confidence}%", (240, 244, 255))
-        if key_facts:
-            pdf.body_text("Key facts identified:")
-            for fact in key_facts:
-                pdf.bullet_item(str(fact))
-    except Exception:
-        logger.exception("PDF: failed to render Query Classification section")
+    # 7. Action Plan / Timeline
+    timeline = analysis.get("timeline", [])
+    filing   = analysis.get("filing_info", {})
+    
+    if timeline or filing:
+        pdf.section_title("Recommended Action Plan")
+        
+        if filing.get("forum"):
+            pdf.subsection_title("Forum Selection")
+            pdf.bullet_item(f"Where to File: {filing['forum']}")
+            if filing.get("limitation_period"):
+                pdf.bullet_item(f"Statute of Limitations: {filing['limitation_period']}")
+                
+        if timeline:
+            pdf.subsection_title("Phased Sequence")
+            for t_item in timeline:
+                step = str(t_item.get("step", ""))
+                when = str(t_item.get("when", ""))
+                pdf.bullet_item(f"[{when}] {step}")
 
-    try:
-        pdf.section_title("Your Legal Rights")
-        pdf.body_text(str(analysis.get("rights_summary", "No analysis available.")))
-    except Exception:
-        logger.exception("PDF: failed to render Legal Rights section")
-
-    try:
-        sections = analysis.get("legal_sections", [])
-        if sections:
-            pdf.section_title("Relevant Laws & Sections")
-            for section in sections:
-                pdf.bullet_item(str(section))
-    except Exception:
-        logger.exception("PDF: failed to render Legal Sections section")
-
-    try:
-        strength = analysis.get("case_strength", 0)
-        pdf.section_title("Case Strength")
-        label = "Strong" if strength >= 70 else "Moderate" if strength >= 40 else "Weak"
-        pdf.body_text(f"{strength}% \u2014 {label} case")
-    except Exception:
-        logger.exception("PDF: failed to render Case Strength section")
-
-    try:
-        steps = analysis.get("next_steps", [])
-        if steps:
-            pdf.section_title("Recommended Next Steps")
-            for i, step in enumerate(steps, 1):
-                pdf.bullet_item(f"{i}. {str(step)}")
-    except Exception:
-        logger.exception("PDF: failed to render Next Steps section")
-
+    # 8. Drafted Document Annexure
     if draft:
-        try:
-            pdf.add_page()
-            pdf.section_title("Drafted Legal Document")
-            pdf.body_text(str(draft))
-        except Exception:
-            logger.exception("PDF: failed to render Draft section")
-
+        pdf.add_page()
+        pdf.section_title("ANNEXURE: Drafted Legal Instrument")
+        
+        # Format the draft with monospace-like simple formatting
+        pdf._set("", 10)
+        pdf.set_text_color(30, 30, 30)
+        
+        # Render line by line
+        for line in str(draft).split('\n'):
+            pdf.multi_cell(0, 5, _clean_text(line))
+            
     return bytes(pdf.output())

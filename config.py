@@ -35,6 +35,25 @@ TEMPERATURE = {
 }
 
 
+# ── Max Output Tokens ────────────────────────────────────────────────────────
+# Caps output length per model role. Prevents the model from generating
+# endlessly and hitting Groq's hard token limit (which truncates mid-JSON).
+
+MAX_TOKENS = {
+    "router":   1024,   # short classification responses
+    "advisor":  4096,   # long structured analysis with case brief
+    "analyzer": 4096,   # document analysis with multiple clauses
+    "drafter":  8192,   # legal documents can be long
+}
+
+
+# ── LLM Timeout ──────────────────────────────────────────────────────────────
+# Seconds to wait for a Groq API response before aborting.
+# Prevents hung requests from blocking Flask threads indefinitely.
+
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
+
+
 # ── Server ────────────────────────────────────────────────────────────────────
 
 APP_TITLE    = "JusticeBot"
