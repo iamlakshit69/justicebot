@@ -13,14 +13,22 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY . .
 
-# Expose the default port
-EXPOSE 8080
+# Expose the port used by Hugging Face Spaces
+EXPOSE 7860
 
-# Run with gunicorn in production (2 workers, 120s timeout for LLM calls)
+# Hugging Face Spaces requires running as a non-root user
+RUN useradd -m -u 1000 user
+USER user
+
+# Set environment variables for the user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
+
+# Run with gunicorn on port 7860
 CMD ["gunicorn", \
      "--workers", "2", \
      "--threads", "4", \
      "--timeout", "120", \
-     "--bind", "0.0.0.0:8080", \
+     "--bind", "0.0.0.0:7860", \
      "--access-logfile", "-", \
      "app:app"]
