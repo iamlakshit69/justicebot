@@ -184,26 +184,33 @@ function hideEmptyState() {
 }
 
 // ─────────────────────────────────────────────
+// STARTER PROMPT CARDS
+// ─────────────────────────────────────────────
+
+function sendStarterPrompt(text) {
+    const input = document.getElementById('userInput');
+    input.value = text;
+    sendMessage();
+}
+
+// ─────────────────────────────────────────────
 // LOADING STATE
 // ─────────────────────────────────────────────
 
 function setLoading(loading) {
     isLoading = loading;
     const btn      = document.getElementById('sendBtn');
-    const icon     = document.getElementById('sendIcon');
     const textarea = document.getElementById('userInput');
 
     if (loading) {
         btn.disabled = true;
         btn.classList.add('loading');
-        icon.setAttribute('data-lucide', 'loader-2');
-        icon.classList.add('loading-icon');
+        btn.innerHTML = '<i data-lucide="loader-2" style="width:18px;height:18px;animation:spin 1s linear infinite"></i>';
         textarea.disabled = true;
     } else {
         btn.disabled = false;
         btn.classList.remove('loading');
-        icon.setAttribute('data-lucide', 'arrow-up');
-        icon.classList.remove('loading-icon');
+        btn.innerHTML = '<i id="sendIcon" data-lucide="arrow-up" style="width:18px;height:18px"></i>';
         textarea.disabled = false;
         textarea.focus();
     }
@@ -220,97 +227,11 @@ function setLoading(loading) {
  */
 function formatBotMessage(text) {
     if (!text) return '';
-
-    let html = '';
-    const lines = text.split('\n');
-    let buffer = [];
-
-    function flushBuffer() {
-        if (buffer.length > 0) {
-            const content = buffer.join(' ').trim();
-            if (content) {
-                // Buffer already contains escaped+formatted HTML — do NOT re-escape
-                html += `<p class="bot-para">${content}</p>`;
-            }
-            buffer = [];
-        }
+    if (typeof marked !== 'undefined') {
+        return marked.parse(text, { breaks: true });
     }
-
-    // Map header text to lucide icon names
-    const iconMap = {
-        'your position':        'shield-check',
-        'what happened':        'file-text',
-        'the facts':            'file-text',
-        'the law on your side': 'scale',
-        'law on your side':     'scale',
-        'applicable law':       'scale',
-        'what they\'ll argue':  'swords',
-        'what they will argue': 'swords',
-        'why they\'re wrong':   'swords',
-        'what you should do':   'arrow-right-circle',
-        'what to do now':       'arrow-right-circle',
-        'recommended action':   'arrow-right-circle',
-        'important deadlines':  'clock',
-        'deadlines':            'clock',
-        'limitation period':    'clock',
-    };
-
-    function getHeaderIcon(headerText) {
-        const lower = headerText.toLowerCase();
-        for (const [key, val] of Object.entries(iconMap)) {
-            if (lower.includes(key)) return val;
-        }
-        return 'chevron-right';
-    }
-
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) { flushBuffer(); continue; }
-
-        // Pattern 1: Entire line is a header — **Something**
-        const fullHeaderMatch = trimmed.match(/^\*\*(.+?)\*\*$/);
-        if (fullHeaderMatch) {
-            flushBuffer();
-            const headerText = fullHeaderMatch[1].trim();
-            html += `<div class="bot-section-header">
-                <i data-lucide="${getHeaderIcon(headerText)}" style="width:14px;height:14px"></i>
-                <span>${escapeHTML(headerText)}</span>
-            </div>`;
-            continue;
-        }
-
-        // Pattern 2: Line STARTS with a header, followed by text — **Header** rest of text...
-        const startHeaderMatch = trimmed.match(/^\*\*(.+?)\*\*\s*(.+)$/);
-        if (startHeaderMatch) {
-            flushBuffer();
-            const headerText = startHeaderMatch[1].trim();
-            const bodyText   = startHeaderMatch[2].trim();
-            html += `<div class="bot-section-header">
-                <i data-lucide="${getHeaderIcon(headerText)}" style="width:14px;height:14px"></i>
-                <span>${escapeHTML(headerText)}</span>
-            </div>`;
-            // Process the body text for inline bold and push to buffer
-            const formatted = escapeHTML(bodyText).replace(
-                /\*\*(.+?)\*\*/g, '<strong>$1</strong>'
-            );
-            buffer.push(formatted);
-            continue;
-        }
-
-        // Regular line — escape and handle inline **bold**
-        const formatted = escapeHTML(trimmed).replace(
-            /\*\*(.+?)\*\*/g, '<strong>$1</strong>'
-        );
-        buffer.push(formatted);
-    }
-
-    flushBuffer();
-
-    if (!html.trim()) {
-        return `<p class="bot-para">${escapeHTML(text)}</p>`;
-    }
-
-    return html;
+    // Fallback if marked is not loaded
+    return `<p class="bot-para">${escapeHTML(text).replace(/\n/g, '<br>')}</p>`;
 }
 
 // ─────────────────────────────────────────────
@@ -362,6 +283,9 @@ function appendBotMessage(text) {
             <div class="bot-avatar"><i data-lucide="scale" style="width:14px;height:14px"></i></div>
             <div class="bot-content">
                 <div class="bot-text">${formatBotMessage(text)}</div>
+                <div class="bot-msg-actions">
+                    <button class="msg-copy-btn" onclick="copyBotMsg(this)"><i data-lucide="copy" style="width:12px;height:12px"></i> Copy</button>
+                </div>
                 <div class="msg-meta">${now()}</div>
             </div>
         </div>`;
@@ -378,24 +302,68 @@ function appendThinking() {
     row.id = id;
     row.className = 'thinking-row';
     row.innerHTML = `
-        <div class="bot-avatar" style="margin-right:10px"><i data-lucide="scale" style="width:14px;height:14px"></i></div>
+        <div class="bot-avatar streaming" style="margin-right:10px"><i data-lucide="scale" style="width:14px;height:14px"></i></div>
         <div class="thinking-bubble">
             <span class="thinking-dot"></span>
             <span class="thinking-dot"></span>
             <span class="thinking-dot"></span>
+            <span class="thinking-status-text">Analyzing your situation…</span>
         </div>`;
     chatArea.appendChild(row);
     icons();
     scrollToBottom();
+
+    // Rotate thinking text
+    const messages = [
+        'Analyzing your situation…',
+        'Looking up relevant laws…',
+        'Building your case strategy…',
+        'Reviewing legal precedents…',
+        'Checking applicable sections…'
+    ];
+    let msgIdx = 0;
+    const statusEl = row.querySelector('.thinking-status-text');
+    const intervalId = setInterval(() => {
+        msgIdx = (msgIdx + 1) % messages.length;
+        if (statusEl) {
+            statusEl.style.animation = 'none';
+            statusEl.offsetHeight; // trigger reflow
+            statusEl.textContent = messages[msgIdx];
+            statusEl.style.animation = 'fadeInText 0.3s var(--ease) both';
+        }
+    }, 3000);
+    row.dataset.intervalId = intervalId;
+
     return id;
 }
 
 function removeThinking(id) {
     const el = document.getElementById(id);
     if (!el) return;
+    if (el.dataset.intervalId) clearInterval(parseInt(el.dataset.intervalId));
     el.style.opacity = '0';
     el.style.transition = 'opacity 0.18s ease';
     setTimeout(() => el.remove(), 200);
+}
+
+// ─────────────────────────────────────────────
+// COPY BOT MESSAGE
+// ─────────────────────────────────────────────
+
+async function copyBotMsg(btn) {
+    const botText = btn.closest('.bot-content').querySelector('.bot-text');
+    const text = botText ? botText.textContent : '';
+    try { await navigator.clipboard.writeText(text); }
+    catch (_) {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i data-lucide="check" style="width:12px;height:12px"></i> Copied!';
+    btn.classList.add('copied');
+    icons();
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); icons(); }, 2000);
 }
 
 // ─────────────────────────────────────────────
@@ -448,8 +416,7 @@ function renderHistory() {
             if (es) es.classList.remove('hidden');
 
             updatePhaseIndicator('GATHERING');
-            updateCaseFileSidebar({});
-            _fetchAndUpdateCaseFile();
+            // Removed case file update
             renderHistory();
             closeSidebar();
         });
@@ -493,7 +460,7 @@ async function startNewChat() {
     input.style.height = 'auto';
 
     updatePhaseIndicator('GATHERING');
-    updateCaseFileSidebar({});
+    // Removed case file update
     renderHistory();
     closeSidebar();
     input.focus();
@@ -522,6 +489,22 @@ async function sendMessage() {
     setLoading(true);
     const thinkingId = appendThinking();
 
+    // Show stop button
+    const sendBtn = document.getElementById('sendBtn');
+    const origBtnHTML = sendBtn.innerHTML;
+    sendBtn.className = 'stop-btn';
+    sendBtn.innerHTML = '<i data-lucide="square" style="width:14px;height:14px"></i>';
+    sendBtn.disabled = false;
+    icons();
+    let abortController = new AbortController();
+    sendBtn.onclick = () => {
+        abortController.abort();
+        sendBtn.className = 'send-btn';
+        sendBtn.innerHTML = origBtnHTML;
+        sendBtn.onclick = () => sendMessage();
+        icons();
+    };
+
     try {
         const response = await fetch('/api/analyze', {
             method: 'POST',
@@ -531,7 +514,8 @@ async function sendMessage() {
                 session_id: sessionId,
                 stream: true,
                 lang: currentLanguage
-            })
+            }),
+            signal: abortController.signal
         });
 
         if (!response.ok) {
@@ -583,6 +567,15 @@ async function sendMessage() {
                             wrapper.innerHTML = formatBotMessage(finalData.message);
                             icons();
                         }
+                        // Add copy button after streaming is done
+                        const botContent = streamParagraph.closest('.bot-content');
+                        if (botContent && !botContent.querySelector('.bot-msg-actions')) {
+                            const actionsDiv = document.createElement('div');
+                            actionsDiv.className = 'bot-msg-actions';
+                            actionsDiv.innerHTML = '<button class="msg-copy-btn" onclick="copyBotMsg(this)"><i data-lucide="copy" style="width:12px;height:12px"></i> Copy</button>';
+                            botContent.insertBefore(actionsDiv, botContent.querySelector('.msg-meta'));
+                            icons();
+                        }
                     } else if (!streamParagraph && finalData.message) {
                         appendBotMessage(finalData.message);
                     }
@@ -598,16 +591,25 @@ async function sendMessage() {
             lastAnalysisResult = finalData;
             updatePhaseIndicator(finalData.phase || 'GATHERING');
             _renderAnalysisEnhancements(finalData);
-            // Update case file sidebar
-            _fetchAndUpdateCaseFile();
+            // Update removed
         }
 
     } catch (err) {
-        removeThinking(thinkingId);
-        appendBotMessage('Connection error. Please check that the server is running.');
-        console.error('[JusticeBot] sendMessage error:', err);
+        if (err.name === 'AbortError') {
+            removeThinking(thinkingId);
+            appendBotMessage('Generation stopped.');
+        } else {
+            removeThinking(thinkingId);
+            appendBotMessage('Connection error. Please check that the server is running.');
+            console.error('[JusticeBot] sendMessage error:', err);
+        }
     } finally {
         setLoading(false);
+        // Restore send button
+        sendBtn.className = 'send-btn';
+        sendBtn.innerHTML = origBtnHTML;
+        sendBtn.onclick = () => sendMessage();
+        icons();
     }
 }
 
@@ -619,91 +621,7 @@ function handleInputKeydown(event) {
 }
 
 // ─────────────────────────────────────────────
-// CASE FILE SIDEBAR
-// ─────────────────────────────────────────────
-
-async function _fetchAndUpdateCaseFile() {
-    try {
-        const r = await fetch(`/api/case-file?session_id=${encodeURIComponent(sessionId)}`);
-        if (r.ok) {
-            const cf = await r.json();
-            updateCaseFileSidebar(cf);
-        }
-    } catch (_) { }
-}
-
-function updateCaseFileSidebar(cf) {
-    const container = document.getElementById('caseFileContent');
-    if (!container) return;
-
-    if (!cf || Object.keys(cf).length === 0) {
-        container.innerHTML = '<p class="cf-empty">Start describing your problem to build your case file.</p>';
-        return;
-    }
-
-    let html = '';
-
-    // Domain
-    if (cf.domain) {
-        const domainLabels = {
-            tenant: '🏠 Tenant / Landlord',
-            consumer: '🛒 Consumer Protection',
-            labour: '👷 Labour / Employment',
-            rti: '📋 Right to Information',
-            criminal: '⚖️ Criminal',
-            family: '👨‍👩‍👧 Family',
-            property: '🏗️ Property'
-        };
-        html += `<div class="cf-row"><span class="cf-label">Type</span><span class="cf-value">${escapeHTML(domainLabels[cf.domain] || cf.domain)}</span></div>`;
-    }
-
-    // Phase
-    if (cf.phase) {
-        html += `<div class="cf-row"><span class="cf-label">Phase</span><span class="cf-badge">${escapeHTML(cf.phase)}</span></div>`;
-    }
-
-    // Parties
-    if (cf.parties) {
-        const parties = cf.parties;
-        if (parties.claimant) html += `<div class="cf-row"><span class="cf-label">You</span><span class="cf-value">${escapeHTML(parties.claimant)}</span></div>`;
-        if (parties.respondent) html += `<div class="cf-row"><span class="cf-label">Opponent</span><span class="cf-value">${escapeHTML(parties.respondent)}</span></div>`;
-    }
-
-    // Amounts
-    if (cf.amounts && Object.keys(cf.amounts).length > 0) {
-        for (const [key, val] of Object.entries(cf.amounts)) {
-            if (val) html += `<div class="cf-row"><span class="cf-label">${escapeHTML(key)}</span><span class="cf-value cf-amount">₹${escapeHTML(String(val))}</span></div>`;
-        }
-    }
-
-    // Facts
-    if (cf.facts && Object.keys(cf.facts).length > 0) {
-        html += '<div class="cf-section-title">Key Facts</div>';
-        for (const [key, val] of Object.entries(cf.facts)) {
-            if (val && typeof val === 'string') {
-                html += `<div class="cf-fact"><span class="cf-fact-check">✓</span><span>${escapeHTML(key)}: ${escapeHTML(val)}</span></div>`;
-            }
-        }
-    }
-
-    // Dates
-    if (cf.dates && Object.keys(cf.dates).length > 0) {
-        html += '<div class="cf-section-title">Dates</div>';
-        for (const [key, val] of Object.entries(cf.dates)) {
-            if (val) html += `<div class="cf-row"><span class="cf-label">${escapeHTML(key)}</span><span class="cf-value">${escapeHTML(String(val))}</span></div>`;
-        }
-    }
-
-    // Documents
-    if (cf.documents_held && cf.documents_held.length > 0) {
-        html += '<div class="cf-section-title">Documents</div>';
-        cf.documents_held.forEach(doc => {
-            html += `<div class="cf-fact"><span class="cf-fact-check">📎</span><span>${escapeHTML(doc)}</span></div>`;
-        });
-    }
-
-    container.innerHTML = html || '<p class="cf-empty">No case details yet.</p>';
-}
+// Removed Case File Sidebar logic
 
 // ─────────────────────────────────────────────
 // RENDER ANALYSIS RESULT — v3 with rich cards

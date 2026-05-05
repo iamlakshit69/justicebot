@@ -1,394 +1,233 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JusticeBot — Free Legal Aid for Indian Citizens</title>
-    <meta name="description"
-        content="JusticeBot provides free AI-powered legal guidance for Indian citizens. Know your rights, get case analysis, and draft legal documents — all in plain language.">
-
+    <title>JusticeBot — Free Legal Aid</title>
+    
     <!-- PWA -->
     <link rel="manifest" href="/static/manifest.json">
-    <meta name="theme-color" content="#0a0a0f">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="JusticeBot">
+    <meta name="theme-color" content="#18181b">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚖️</text></svg>" type="image/svg+xml">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- Lucide Icons -->
+    <!-- Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
-
 <body>
 
-    <!-- ── SIDEBAR OVERLAY (mobile backdrop) ────────────────────────────── -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-
-    <!-- ── SIDEBAR ───────────────────────────────────────────────────────── -->
+    <!-- ── SIDEBAR ── -->
     <aside class="sidebar" id="sidebar">
-        <div class="sidebar-inner">
-
-            <!-- Logo -->
-            <div class="sidebar-logo">
-                <div class="logo-mark">
-                    <i data-lucide="scale" style="width:17px;height:17px"></i>
-                </div>
-                <div class="logo-text-group">
-                    <span class="logo-text">JusticeBot</span>
-                    <span class="sidebar-tagline">Free Legal Aid</span>
-                </div>
+        <!-- Logo -->
+        <div class="sidebar-logo">
+            <div class="logo-mark">
+                <i data-lucide="scale" style="width:18px;height:18px"></i>
             </div>
-
-            <!-- New Conversation -->
-            <button class="new-chat-btn" id="newChatBtn" onclick="startNewChat()">
-                <i data-lucide="plus" style="width:15px;height:15px"></i>
-                <span>New Conversation</span>
-            </button>
-
-            <!-- Chat History -->
-            <p class="sidebar-section-label">Recent</p>
-            <div class="history-list" id="historyList">
-                <!-- Injected by JS -->
-            </div>
-
-            <!-- Find Legal Aid — bottom of sidebar -->
-            <div style="margin-top: auto; padding-top: 16px;">
-                <button class="legal-aid-open-btn" id="openLegalAidBtn" onclick="openLegalAidFinder()">
-                    <div class="legal-aid-open-btn-icon">
-                        <i data-lucide="map-pin" style="width:15px;height:15px"></i>
-                    </div>
-                    <div class="legal-aid-open-btn-text">
-                        <span class="legal-aid-open-title">Find Legal Help</span>
-                        <span class="legal-aid-open-sub">Courts · DLSA · Police</span>
-                    </div>
-                    <i data-lucide="chevron-right" style="width:14px;height:14px;opacity:0.4;flex-shrink:0"></i>
-                </button>
-            </div>
-
+            <div class="logo-text">JusticeBot</div>
         </div>
 
-        <!-- Sidebar footer -->
+        <!-- New Chat -->
+        <button class="new-chat-btn" id="newChatBtn" onclick="startNewChat()">
+            <i data-lucide="plus" style="width:16px;height:16px"></i>
+            New Chat
+        </button>
+
+        <!-- History -->
+        <p class="sidebar-section-label">Recent</p>
+        <div class="history-list" id="historyList"></div>
+
+        <!-- Footer -->
         <div class="sidebar-footer">
             <p>AI guidance only — not a substitute for professional legal advice.</p>
         </div>
     </aside>
 
-    <!-- ── MOBILE SIDEBAR TOGGLE ─────────────────────────────────────────── -->
-    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Open menu" onclick="toggleSidebar()">
-        <i data-lucide="menu" style="width:18px;height:18px"></i>
+    <!-- Mobile toggles -->
+    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+        <i data-lucide="menu" style="width:20px;height:20px"></i>
     </button>
+    <button class="lang-toggle-btn" id="langToggleBtn" onclick="toggleLanguage()">हिं</button>
 
-    <!-- ── LANGUAGE TOGGLE ───────────────────────────────────────────────── -->
-    <button class="lang-toggle-btn" id="langToggleBtn"
-            onclick="toggleLanguage()"
-            title="Switch between English and Hindi"
-            aria-label="Toggle language">हिं</button>
-
-    <!-- ── MAIN ──────────────────────────────────────────────────────────── -->
+    <!-- ── MAIN CONTENT ── -->
     <main class="main">
-
-        <!-- Disclaimer banner -->
-        <div class="disclaimer-banner" id="disclaimerBanner">
-            <i data-lucide="alert-triangle" style="width:13px;height:13px;flex-shrink:0"></i>
-            <span><strong>AI guidance only.</strong> Not a substitute for professional legal advice. In emergencies call
-                112.</span>
-            <button class="dismiss-disclaimer" aria-label="Dismiss"
-                onclick="this.closest('.disclaimer-banner').style.display='none'">
-                <i data-lucide="x" style="width:13px;height:13px"></i>
-            </button>
-        </div>
-
-        <!-- ── PHASE INDICATOR ─────────────────────────────────────────────── -->
+        
+        <!-- Phase Indicator -->
         <div class="phase-indicator" id="phaseIndicator">
-            <div class="phase-step">
-                <span class="phase-dot active current" id="phase-dot-0"></span>
-                <span class="phase-label active" id="phase-label-0">Gathering Info</span>
-            </div>
-            <div class="phase-connector"></div>
-            <div class="phase-step">
-                <span class="phase-dot" id="phase-dot-1"></span>
-                <span class="phase-label" id="phase-label-1">Analysis</span>
-            </div>
-            <div class="phase-connector"></div>
-            <div class="phase-step">
-                <span class="phase-dot" id="phase-dot-2"></span>
-                <span class="phase-label" id="phase-label-2">Drafting</span>
+            <div class="phase-dots">
+                <div class="phase-dot active current" id="phase-dot-0" title="Gathering Info"></div>
+                <div class="phase-dot" id="phase-dot-1" title="Analysis"></div>
+                <div class="phase-dot" id="phase-dot-2" title="Drafting"></div>
             </div>
         </div>
 
-        <!-- ── EMPTY STATE ────────────────────────────────────────────────── -->
-        <div class="empty-state" id="emptyState">
-            <div class="empty-logo">
-                <i data-lucide="scale" style="width:22px;height:22px"></i>
-            </div>
-            <p class="empty-title">JusticeBot</p>
-            <p class="empty-sub">Tell me what happened — in plain language, in as much detail as you can. I'll analyze
-                your situation, cite the exact laws that protect you, and help you take action.</p>
-        </div>
-
-        <!-- ── CHAT AREA + CASE FILE SIDEBAR ──────────────────────────────── -->
-        <div class="chat-layout">
-            <div class="chat-area" id="chatArea">
-                <!-- Messages injected by JS -->
-            </div>
-
-            <!-- Case File Sidebar -->
-            <aside class="case-file-sidebar" id="caseFileSidebar">
-                <div class="cf-header">
-                    <i data-lucide="folder-open" style="width:14px;height:14px"></i>
-                    <span>Your Case File</span>
+        <div class="chat-area" id="chatArea">
+            
+            <div class="chat-container">
+                <!-- EMPTY STATE -->
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-logo">
+                        <i data-lucide="scale" style="width:32px;height:32px"></i>
+                    </div>
+                    <h1 class="empty-title">How can I help you today?</h1>
+                    <p class="empty-sub">Describe your legal problem in plain language, and I will analyze your situation and help you take action.</p>
+                    
+                    <div class="starter-cards" id="starterCards">
+                        <button class="starter-card" onclick="sendStarterPrompt('My landlord is refusing to return my security deposit even though I have the rental agreement and paid all rent on time.')">
+                            <span class="starter-card-icon">🏠</span>
+                            <span>Landlord won't return deposit</span>
+                        </button>
+                        <button class="starter-card" onclick="sendStarterPrompt('My employer has not paid my salary for the last 3 months. I work at a private company and have an offer letter.')">
+                            <span class="starter-card-icon">💼</span>
+                            <span>Unpaid salary dispute</span>
+                        </button>
+                        <button class="starter-card" onclick="sendStarterPrompt('I want to file an RTI application to get information from a government department about pending road construction in my area.')">
+                            <span class="starter-card-icon">📋</span>
+                            <span>Draft an RTI application</span>
+                        </button>
+                        <button class="starter-card" onclick="sendStarterPrompt('I bought a defective mobile phone online worth ₹25000 and the company is refusing to give a refund or replacement.')">
+                            <span class="starter-card-icon">🛍️</span>
+                            <span>Consumer complaint draft</span>
+                        </button>
+                    </div>
                 </div>
-                <div class="cf-content" id="caseFileContent">
-                    <p class="cf-empty">Start describing your problem to build your case file.</p>
-                </div>
-            </aside>
+                <!-- /EMPTY STATE -->
+
+                <!-- Messages injected here by JS -->
+            </div>
+            
         </div>
 
-        <!-- Scroll-to-bottom button -->
-        <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="scrollToBottom()"
-                aria-label="Scroll to bottom" style="display:none">
-            <i data-lucide="chevrons-down" style="width:16px;height:16px"></i>
-        </button>
-
-        <!-- ── BOTTOM CONTROLS ────────────────────────────────────────────── -->
+        <!-- ── INPUT BAR ── -->
         <div class="bottom-controls">
-
-            <!-- Upload row (attachment + status) -->
-            <div class="upload-row">
-                <label class="upload-label" for="docUpload">
-                    <i data-lucide="paperclip" style="width:13px;height:13px"></i>
-                    <span>Attach document</span>
-                </label>
-                <input type="file" id="docUpload" accept=".pdf,.docx" onchange="handleDocUpload(event)">
+            <div class="input-container">
                 <span class="upload-status" id="uploadStatus"></span>
+                <div class="input-wrapper" id="inputWrapper">
+                    
+                    <!-- Integrated Upload Button -->
+                    <label class="upload-btn" for="docUpload" title="Attach document">
+                        <i data-lucide="paperclip" style="width:18px;height:18px"></i>
+                    </label>
+                    <input type="file" id="docUpload" accept=".pdf,.docx" onchange="handleDocUpload(event)" style="display:none">
+                    
+                    <textarea id="userInput" rows="1" placeholder="Message JusticeBot..."
+                        onkeydown="handleInputKeydown(event)"
+                        oninput="autoResizeTextarea(this)"></textarea>
+                        
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                        <i id="sendIcon" data-lucide="arrow-up" style="width:18px;height:18px"></i>
+                    </button>
+                </div>
             </div>
-
-            <!-- Input bar -->
-            <div class="input-wrapper" id="inputWrapper">
-                <textarea id="userInput" rows="1" placeholder="Describe your legal problem…"
-                    aria-label="Legal query input" onkeydown="handleInputKeydown(event)"
-                    oninput="autoResizeTextarea(this)"></textarea>
-                <button class="send-btn" id="sendBtn" aria-label="Send" onclick="sendMessage()">
-                    <i data-lucide="arrow-up" style="width:16px;height:16px" id="sendIcon"></i>
-                </button>
-            </div>
-
-            <!-- Keyboard hint -->
-            <div class="input-hint">
-                <kbd>Return</kbd> to send &nbsp;·&nbsp; <kbd>Shift</kbd><kbd>Return</kbd> for new line
-            </div>
-
         </div>
 
-    </main><!-- /.main -->
+    </main>
 
-
-    <!-- ══════════════════════════════════════════════════════════════════════
-         MODALS
-         ══════════════════════════════════════════════════════════════════════ -->
-
-    <!-- ── DRAFT / ANALYSIS RESULT MODAL ─────────────────────────────────── -->
+    <!-- ── MODALS ── -->
+    
+    <!-- Draft / Result Modal -->
     <div class="modal-overlay" id="modalOverlay" onclick="closeModal()"></div>
-    <div class="modal" id="resultModal" role="dialog" aria-modal="true" aria-labelledby="modalTitleText">
+    <div class="modal" id="resultModal" role="dialog" aria-modal="true">
         <div class="modal-header">
-            <h2>
-                <i data-lucide="file-text" style="width:17px;height:17px"></i>
-                <span id="modalTitleText">Legal Analysis</span>
-            </h2>
-            <button class="modal-close" aria-label="Close" onclick="closeModal()">
+            <h2 id="modalTitleText">Legal Analysis</h2>
+            <button class="modal-close" onclick="closeModal()">
                 <i data-lucide="x" style="width:16px;height:16px"></i>
             </button>
         </div>
-
-        <!-- Read view -->
         <div class="modal-body" id="modalBody"></div>
-        <!-- Edit view (hidden by default) -->
-        <textarea class="modal-edit-area" id="modalEditArea" style="display:none"
-                  aria-label="Edit draft document" spellcheck="true"></textarea>
-
+        <textarea class="modal-edit-area hidden" id="modalEditArea" spellcheck="true"></textarea>
         <div class="modal-footer">
             <button class="edit-btn" id="editDraftBtn" onclick="toggleDraftEdit()">
-                <i data-lucide="pencil" style="width:14px;height:14px"></i>
-                Edit
+                <i data-lucide="pencil" style="width:14px;height:14px"></i> Edit
             </button>
             <button class="copy-btn" id="copyDraftBtn" onclick="copyDraftToClipboard()">
-                <i data-lucide="copy" style="width:14px;height:14px"></i>
-                Copy text
+                <i data-lucide="copy" style="width:14px;height:14px"></i> Copy
             </button>
             <button class="download-btn" id="downloadPdfBtn" onclick="downloadPDF()">
-                <i data-lucide="download" style="width:14px;height:14px"></i>
-                Download PDF
+                <i data-lucide="download" style="width:14px;height:14px"></i> Download PDF
             </button>
         </div>
     </div>
 
-    <!-- ── SECTION EXPLANATION MODAL ─────────────────────────────────────── -->
+    <!-- Section Modal -->
     <div class="section-modal-overlay" id="sectionModalOverlay" onclick="closeSectionModal()"></div>
     <div class="section-modal" id="sectionModal" role="dialog" aria-modal="true">
         <div class="section-modal-header">
-            <div class="section-modal-icon">
-                <i data-lucide="book-open" style="width:18px;height:18px"></i>
-            </div>
             <h3 id="sectionModalTitle">Section Details</h3>
-            <button class="modal-close" aria-label="Close" onclick="closeSectionModal()">
+            <button class="modal-close" onclick="closeSectionModal()">
                 <i data-lucide="x" style="width:16px;height:16px"></i>
             </button>
         </div>
         <div class="section-modal-body" id="sectionModalBody">
-            <!-- Loading state -->
             <div class="section-loading" id="sectionLoading">
-                <div class="thinking-bubble" style="display:inline-flex">
-                    <span class="thinking-dot"></span>
-                    <span class="thinking-dot"></span>
-                    <span class="thinking-dot"></span>
-                </div>
                 <p>Fetching explanation…</p>
             </div>
-            <!-- Content (shown after load) -->
-            <div class="section-content" id="sectionContent" style="display:none">
-                <div class="section-info-row">
-                    <span class="section-info-label">Act</span>
-                    <span class="section-info-value" id="sectionAct"></span>
-                </div>
-                <div class="section-info-divider"></div>
+            <div class="section-content hidden" id="sectionContent">
                 <div class="section-info-block">
-                    <span class="section-info-label">What it means</span>
+                    <span class="section-info-label">Act:</span> <span id="sectionAct"></span>
+                </div>
+                <div class="section-info-block">
+                    <span class="section-info-label">What it means:</span>
                     <p id="sectionExplanation"></p>
                 </div>
                 <div class="section-info-block">
-                    <span class="section-info-label">Punishment / Remedy</span>
+                    <span class="section-info-label">Punishment / Remedy:</span>
                     <p id="sectionPunishment"></p>
                 </div>
-                <div class="section-info-block example-block">
-                    <span class="section-info-label">
-                        <i data-lucide="lightbulb" style="width:13px;height:13px"></i>
-                        Example scenario
-                    </span>
+                <div class="section-info-block">
+                    <span class="section-info-label">Example scenario:</span>
                     <p id="sectionExample"></p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ── LEGAL AID FINDER MODAL ─────────────────────────────────────────── -->
+    <!-- Legal Aid Modal -->
     <div class="legal-aid-overlay" id="legalAidOverlay" onclick="closeLegalAidFinder()"></div>
-    <div class="legal-aid-modal" id="legalAidModal" role="dialog" aria-modal="true"
-        aria-label="Find Legal Help Near You">
-
+    <div class="legal-aid-modal" id="legalAidModal" role="dialog" aria-modal="true">
         <div class="legal-aid-header">
-            <div class="legal-aid-title-row">
-                <div class="legal-aid-title-icon">
-                    <i data-lucide="map-pin" style="width:20px;height:20px"></i>
-                </div>
-                <div>
-                    <h2>Find Legal Help Near You</h2>
-                    <p class="legal-aid-subtitle">Courts · Lawyers · DLSA · Police stations</p>
-                </div>
-            </div>
-            <button class="modal-close" aria-label="Close" onclick="closeLegalAidFinder()">
+            <h2>Find Legal Help Near You</h2>
+            <button class="modal-close" onclick="closeLegalAidFinder()">
                 <i data-lucide="x" style="width:18px;height:18px"></i>
             </button>
         </div>
-
         <div class="legal-aid-content">
-
-            <!-- Location bar -->
-            <div class="legal-aid-location-bar">
+            <div class="legal-aid-location-bar flex gap-2" style="margin-bottom: 16px;">
                 <button class="location-detect-btn" id="locationDetectBtn" onclick="autoDetectLocation()">
                     <i data-lucide="crosshair" style="width:15px;height:15px"></i>
-                    <span>Auto-detect</span>
                 </button>
-                <div class="location-divider-text">or</div>
-                <div class="location-input-wrapper">
-                    <i data-lucide="search" style="width:15px;height:15px" class="location-search-icon"></i>
-                    <input type="text" id="locationInput" placeholder="City, address, or pincode…"
-                        onkeydown="if(event.key==='Enter') searchByAddress()" autocomplete="off">
-                    <button class="location-search-btn" aria-label="Search" onclick="searchByAddress()">
-                        <i data-lucide="arrow-right" style="width:15px;height:15px"></i>
-                    </button>
-                </div>
+                <input type="text" id="locationInput" placeholder="City, address, or pincode…" style="flex:1; padding: 8px; border-radius: 8px; background: var(--bg-input); border: 1px solid var(--border); color: white;" onkeydown="if(event.key==='Enter') searchByAddress()">
+                <button class="location-search-btn" onclick="searchByAddress()" style="padding: 8px 12px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; color: white;">Search</button>
             </div>
-
-            <!-- Status bar -->
-            <div class="legal-aid-status" id="legalAidStatus" style="display:none">
-                <i data-lucide="info" style="width:13px;height:13px"></i>
+            <div id="legalAidStatus" class="hidden" style="margin-bottom: 16px; font-size: 14px; color: var(--text-secondary);">
                 <span id="legalAidStatusText"></span>
             </div>
-
-            <!-- Map + results -->
-            <div class="legal-aid-body">
-
-                <!-- Map -->
-                <div class="legal-aid-map-container">
-                    <div id="legalAidMap" class="legal-aid-map"></div>
-                    <div class="map-placeholder" id="mapPlaceholder">
-                        <i data-lucide="map" style="width:44px;height:44px;opacity:0.3"></i>
-                        <p>Allow location access or enter an address<br>to view the map</p>
+            <div class="legal-aid-body" style="display: flex; flex-direction: column; gap: 16px;">
+                <div id="legalAidMap" style="height: 250px; border-radius: 12px; background: var(--bg-surface);"></div>
+                <div id="legalAidResults" style="min-height: 150px;">
+                    <div id="legalAidList"></div>
+                    <div id="dlsaCardContainer" class="hidden">
+                        <h4 style="margin-bottom: 8px;">Free Legal Aid Office</h4>
+                        <div id="dlsaCard" style="padding: 12px; background: var(--bg-surface); border-radius: 8px;"></div>
                     </div>
-                </div>
-
-                <!-- Results panel -->
-                <div class="legal-aid-results" id="legalAidResults">
-
-                    <!-- Category tabs -->
-                    <div class="legal-aid-tabs" id="legalAidTabs">
-                        <button class="lai-tab active" data-category="all" onclick="filterLegalAidResults('all')">
-                            <i data-lucide="layers" style="width:13px;height:13px"></i> All
-                        </button>
-                        <button class="lai-tab" data-category="court" onclick="filterLegalAidResults('court')">
-                            <i data-lucide="landmark" style="width:13px;height:13px"></i> Courts
-                        </button>
-                        <button class="lai-tab" data-category="police" onclick="filterLegalAidResults('police')">
-                            <i data-lucide="shield" style="width:13px;height:13px"></i> Police
-                        </button>
-                    </div>
-
-                    <!-- Results list -->
-                    <div class="legal-aid-list" id="legalAidList">
-                        <div class="legal-aid-empty" id="legalAidEmpty">
-                            <i data-lucide="compass" style="width:34px;height:34px;opacity:0.3"></i>
-                            <p>Search a location to find<br>legal resources near you</p>
-                        </div>
-                    </div>
-
-                    <!-- DLSA card (populated by JS via /api/dlsa) -->
-                    <div class="dlsa-card-container" id="dlsaCardContainer" style="display:none">
-                        <div class="dlsa-card-header">
-                            <i data-lucide="shield" style="width:14px;height:14px"></i>
-                            <span>Free Legal Aid Office</span>
-                        </div>
-                        <div class="dlsa-card" id="dlsaCard"></div>
-                    </div>
-
                 </div>
             </div>
         </div>
     </div>
-    <!-- /.legal-aid-modal -->
 
-
-    <!-- ── SCRIPTS ────────────────────────────────────────────────────────── -->
+    <!-- Scripts -->
+    <!-- Leaflet JS & CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    
     <script src="/static/script.js"></script>
-    <script>
-        lucide.createIcons();
-    </script>
-
-
+    <script>lucide.createIcons();</script>
 </body>
-
 </html>
