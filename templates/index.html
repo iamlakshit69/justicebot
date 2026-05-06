@@ -50,6 +50,9 @@
         </div>
     </aside>
 
+    <!-- Sidebar overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
     <!-- Mobile toggles -->
     <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
         <i data-lucide="menu" style="width:20px;height:20px"></i>
@@ -66,7 +69,17 @@
                 <div class="phase-dot" id="phase-dot-1" title="Analysis"></div>
                 <div class="phase-dot" id="phase-dot-2" title="Drafting"></div>
             </div>
+            <div class="phase-labels">
+                <span class="phase-label active" id="phase-label-0">Info</span>
+                <span class="phase-label" id="phase-label-1">Advice</span>
+                <span class="phase-label" id="phase-label-2">Draft</span>
+            </div>
         </div>
+
+        <!-- Scroll to bottom button -->
+        <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="scrollToBottom()" style="display:none">
+            <i data-lucide="chevrons-down" style="width:16px;height:16px"></i>
+        </button>
 
         <div class="chat-area" id="chatArea">
             
@@ -142,7 +155,8 @@
             </button>
         </div>
         <div class="modal-body" id="modalBody"></div>
-        <textarea class="modal-edit-area hidden" id="modalEditArea" spellcheck="true"></textarea>
+        <!-- NOTE: no .hidden class — JS controls display via style.display for edit toggle -->
+        <textarea class="modal-edit-area" id="modalEditArea" spellcheck="true" style="display:none"></textarea>
         <div class="modal-footer">
             <button class="edit-btn" id="editDraftBtn" onclick="toggleDraftEdit()">
                 <i data-lucide="pencil" style="width:14px;height:14px"></i> Edit
@@ -166,10 +180,12 @@
             </button>
         </div>
         <div class="section-modal-body" id="sectionModalBody">
-            <div class="section-loading" id="sectionLoading">
+            <div class="section-loading" id="sectionLoading" style="display:flex;align-items:center;gap:10px;padding:20px 0;color:var(--text-secondary)">
+                <div class="thinking-spinner"></div>
                 <p>Fetching explanation…</p>
             </div>
-            <div class="section-content hidden" id="sectionContent">
+            <!-- NOTE: no .hidden class — JS controls display via style.display -->
+            <div class="section-content" id="sectionContent" style="display:none">
                 <div class="section-info-block">
                     <span class="section-info-label">Act:</span> <span id="sectionAct"></span>
                 </div>
@@ -199,25 +215,53 @@
             </button>
         </div>
         <div class="legal-aid-content">
-            <div class="legal-aid-location-bar flex gap-2" style="margin-bottom: 16px;">
-                <button class="location-detect-btn" id="locationDetectBtn" onclick="autoDetectLocation()">
+            <!-- Location bar -->
+            <div class="legal-aid-location-bar" style="display:flex;gap:8px;margin-bottom:12px;">
+                <button class="location-detect-btn" id="locationDetectBtn" onclick="autoDetectLocation()" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);cursor:pointer;white-space:nowrap;font-size:13px;">
                     <i data-lucide="crosshair" style="width:15px;height:15px"></i>
+                    <span>Auto-detect</span>
                 </button>
-                <input type="text" id="locationInput" placeholder="City, address, or pincode…" style="flex:1; padding: 8px; border-radius: 8px; background: var(--bg-input); border: 1px solid var(--border); color: white;" onkeydown="if(event.key==='Enter') searchByAddress()">
-                <button class="location-search-btn" onclick="searchByAddress()" style="padding: 8px 12px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; color: white;">Search</button>
+                <input type="text" id="locationInput" placeholder="City, address, or pincode…"
+                    style="flex:1;padding:8px 12px;border-radius:8px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);font-size:13px;outline:none;"
+                    onkeydown="if(event.key==='Enter') searchByAddress()">
+                <button onclick="searchByAddress()" style="padding:8px 14px;background:var(--accent);border:none;border-radius:8px;color:white;cursor:pointer;font-size:13px;">Search</button>
             </div>
-            <div id="legalAidStatus" class="hidden" style="margin-bottom: 16px; font-size: 14px; color: var(--text-secondary);">
+
+            <!-- Status bar — no .hidden class; JS uses style.display -->
+            <div id="legalAidStatus" style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-surface);border-radius:8px;">
+                <i data-lucide="info" style="width:14px;height:14px;flex-shrink:0"></i>
                 <span id="legalAidStatusText"></span>
             </div>
-            <div class="legal-aid-body" style="display: flex; flex-direction: column; gap: 16px;">
-                <div id="legalAidMap" style="height: 250px; border-radius: 12px; background: var(--bg-surface);"></div>
-                <div id="legalAidResults" style="min-height: 150px;">
-                    <div id="legalAidList"></div>
-                    <div id="dlsaCardContainer" class="hidden">
-                        <h4 style="margin-bottom: 8px;">Free Legal Aid Office</h4>
-                        <div id="dlsaCard" style="padding: 12px; background: var(--bg-surface); border-radius: 8px;"></div>
-                    </div>
+
+            <!-- Filter tabs -->
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <button class="lai-tab active" data-category="all" onclick="filterLegalAidResults('all')" style="padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg-surface-hover);color:var(--text-primary);font-size:12px;cursor:pointer;">All</button>
+                <button class="lai-tab" data-category="court" onclick="filterLegalAidResults('court')" style="padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:12px;cursor:pointer;">Courts</button>
+                <button class="lai-tab" data-category="police" onclick="filterLegalAidResults('police')" style="padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:12px;cursor:pointer;">Police</button>
+            </div>
+
+            <!-- Map -->
+            <div style="position:relative;">
+                <div id="legalAidMap" style="height:240px;border-radius:12px;background:var(--bg-surface);overflow:hidden;"></div>
+                <div id="mapPlaceholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-secondary);font-size:13px;gap:8px;pointer-events:none;">
+                    <i data-lucide="map" style="width:28px;height:28px;opacity:0.3"></i>
+                    <span>Search a location to load map</span>
                 </div>
+            </div>
+
+            <!-- Results list -->
+            <div id="legalAidResults" style="margin-top:12px;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+                <div id="legalAidList" style="display:flex;flex-direction:column;gap:8px;"></div>
+                <div id="legalAidEmpty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 0;color:var(--text-secondary);font-size:13px;gap:10px;text-align:center;">
+                    <i data-lucide="search-x" style="width:32px;height:32px;opacity:0.3"></i>
+                    <p>Search a location to find<br>legal resources near you</p>
+                </div>
+            </div>
+
+            <!-- DLSA Free Legal Aid office card — no .hidden class; JS uses style.display -->
+            <div id="dlsaCardContainer" style="display:none;margin-top:16px;">
+                <h4 style="margin-bottom:8px;font-size:13px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.05em;">Free Legal Aid Office (State)</h4>
+                <div id="dlsaCard" style="padding:14px;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border);"></div>
             </div>
         </div>
     </div>

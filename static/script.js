@@ -1520,14 +1520,34 @@ async function _searchViaNominatim(lat, lng) {
 }
 
 function renderLegalAidResults() {
-    const listEl = document.getElementById('legalAidList'); const emptyEl = document.getElementById('legalAidEmpty');
-    const filtered = currentLegalAidFilter === 'all' ? legalAidResults : legalAidResults.filter(r => r.category === currentLegalAidFilter);
+    const listEl  = document.getElementById('legalAidList');
+    const emptyEl = document.getElementById('legalAidEmpty');
+    const filtered = currentLegalAidFilter === 'all'
+        ? legalAidResults
+        : legalAidResults.filter(r => r.category === currentLegalAidFilter);
+
+    // Clear existing cards only
     listEl.querySelectorAll('.lai-card').forEach(c => c.remove());
-    if (filtered.length === 0) { emptyEl.style.display = 'flex'; emptyEl.innerHTML = `<i data-lucide="search-x" style="width:36px;height:36px;opacity:0.3"></i><p>${legalAidResults.length === 0 ? 'Search a location to find<br>legal resources near you' : 'No results in this category'}</p>`; icons(); return; }
+
+    if (filtered.length === 0) {
+        emptyEl.style.display = 'flex';
+        // Update text based on context
+        const msgEl = emptyEl.querySelector('p');
+        if (msgEl) {
+            msgEl.innerHTML = legalAidResults.length === 0
+                ? 'Search a location to find<br>legal resources near you'
+                : 'No results in this category';
+        }
+        icons();
+        return;
+    }
+
     emptyEl.style.display = 'none';
     filtered.forEach((result, idx) => {
-        const cfg = categoryConfig[result.category] || categoryConfig.court;
-        const card = document.createElement('div'); card.className = 'lai-card'; card.style.animationDelay = `${idx * 50}ms`;
+        const cfg  = categoryConfig[result.category] || categoryConfig.court;
+        const card = document.createElement('div');
+        card.className = 'lai-card';
+        card.style.animationDelay = `${idx * 50}ms`;
         card.innerHTML = `<div class="lai-card-icon"><i data-lucide="${cfg.icon}" style="width:18px;height:18px"></i></div><div class="lai-card-body"><div class="lai-card-name">${escapeHTML(result.name)}</div><span class="lai-card-cat">${cfg.label}</span>${result.address ? `<span class="lai-card-addr">${escapeHTML(result.address)}</span>` : ''}<div class="lai-card-meta"><span class="lai-card-dist">${result.distance.toFixed(1)} km</span>${result.phone ? `<a href="tel:${result.phone}" class="lai-card-phone">📞 ${escapeHTML(result.phone)}</a>` : ''}</div></div><button class="lai-card-locate" onclick="focusOnMarker(${result.lat},${result.lng})" title="Show on map"><i data-lucide="map-pin" style="width:16px;height:16px"></i></button>`;
         listEl.appendChild(card);
     });
