@@ -41,7 +41,8 @@ TEMPERATURE = {
 
 MAX_TOKENS = {
     "router":   1024,   # short classification responses
-    "advisor":  4096,   # long structured analysis with case brief
+    "advisor":  3000,   # legal analysis — reduced from 4096 to stay under Groq free-tier 6k TPM
+                        # (system prompt is ~2100 tokens, so 3000 output = ~5100 total, safely under limit)
     "analyzer": 4096,   # document analysis with multiple clauses
     "drafter":  8192,   # legal documents can be long
 }

@@ -28,6 +28,11 @@ def get_client() -> Groq:
     """Return the singleton Groq client (lazy-initialised)."""
     global _client
     if _client is None:
+        if not GROQ_API_KEY:
+            raise EnvironmentError(
+                "GROQ_API_KEY is not set. "
+                "Add it to your .env file locally, or to Vercel/Render Environment Variables in production."
+            )
         _client = Groq(api_key=GROQ_API_KEY, timeout=LLM_TIMEOUT)
     return _client
 
@@ -83,9 +88,14 @@ def chat_completion(
             if attempt < max_retries:
                 wait = min(2 ** (attempt - 1), 4)   # 1 s, 2 s, cap at 4 s
                 logger.warning(
-                    f"LLM call failed (attempt {attempt}/{max_retries}), "
+                    f"LLM call failed [{type(e).__name__}] (attempt {attempt}/{max_retries}), "
                     f"retrying in {wait}s: {e}"
                 )
                 time.sleep(wait)
+            else:
+                logger.error(
+                    f"LLM call failed [{type(e).__name__}] after {max_retries} attempt(s): {e}",
+                    exc_info=True,
+                )
 
     raise last_error  # type: ignore[misc]
