@@ -18,9 +18,9 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 MODELS = {
     "router":   "llama-3.1-8b-instant",        # fast, lightweight — classification only
-    "advisor":  "llama-3.3-70b-versatile",      # best quality — legal reasoning
-    "analyzer": "llama-3.1-70b-versatile",      # large context — document analysis (replaces deprecated mixtral)
-    "drafter":  "llama-3.3-70b-versatile",      # best quality — document drafting
+    "advisor":  "llama-3.1-8b-instant",        # best quality — legal reasoning
+    "analyzer": "llama-3.1-8b-instant",        # large context — document analysis (replaces deprecated mixtral)
+    "drafter":  "llama-3.1-8b-instant",        # best quality — document drafting
 }
 
 
