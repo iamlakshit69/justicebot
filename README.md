@@ -1,4 +1,4 @@
-# ⚖️ JusticeBot
+# ⚖️ JusticeBot Chatbot
 
 **Free AI-powered legal guidance for every Indian citizen.**
 
